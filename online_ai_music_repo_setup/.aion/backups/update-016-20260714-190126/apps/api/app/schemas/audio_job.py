@@ -66,8 +66,6 @@ class AudioJobResponse(BaseModel):
     loop_crossfade_seconds: float
     seed: int | None
     status: str
-    review_status: str
-    review_reason: str | None
     output_file_path: str | None
     error_message: str | None
     created_at: datetime

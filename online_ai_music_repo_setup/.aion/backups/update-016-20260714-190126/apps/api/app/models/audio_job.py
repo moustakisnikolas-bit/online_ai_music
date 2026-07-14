@@ -41,13 +41,6 @@ class AudioJob(Base):
     loop_crossfade_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=0.25)
     seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="queued", index=True)
-    review_status: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-        default="pending",
-        index=True,
-    )
-    review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
