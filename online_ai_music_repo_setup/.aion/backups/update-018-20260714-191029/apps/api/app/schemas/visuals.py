@@ -29,32 +29,3 @@ class VideoManifestRequest(BaseModel):
 class VideoManifestResponse(BaseModel):
     manifest_filename: str
     manifest_path: str
-
-
-class VideoRenderRequest(BaseModel):
-    audio_filename: str = Field(min_length=1, max_length=500)
-    artwork_filename: str = Field(min_length=1, max_length=500)
-    output_filename: str = Field(min_length=1, max_length=500)
-    width: int = Field(default=1920, ge=320, le=7680)
-    height: int = Field(default=1080, ge=240, le=4320)
-    frame_rate: int = Field(default=30, ge=1, le=120)
-
-
-class VideoRenderResponse(BaseModel):
-    filename: str
-    file_path: str
-
-
-class ExportBundleRequest(BaseModel):
-    title: str = Field(min_length=1, max_length=255)
-    audio_filename: str = Field(min_length=1, max_length=500)
-    artwork_filename: str | None = Field(default=None, max_length=500)
-    video_filename: str | None = Field(default=None, max_length=500)
-    metadata: dict
-
-
-class ExportBundleResponse(BaseModel):
-    manifest_filename: str
-    manifest_path: str
-    zip_filename: str
-    zip_path: str
