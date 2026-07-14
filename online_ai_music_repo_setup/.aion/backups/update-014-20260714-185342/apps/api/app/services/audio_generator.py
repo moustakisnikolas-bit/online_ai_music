@@ -17,7 +17,6 @@ from app.audio.dsp import (
 from app.audio.presets import get_preset
 from app.audio.types import AudioMode, ChannelMode
 from app.services.audio_encoding import encode_audio
-from app.services.long_form_audio import render_long_form_wav
 from app.schemas.audio import AudioGenerationRequest, AudioGenerationResponse
 
 
@@ -153,51 +152,6 @@ def generate_audio(
     output_dir.mkdir(parents=True, exist_ok=True)
     asset_id = str(uuid.uuid4())
     output_path = output_dir / f"{asset_id}.wav"
-
-    if request.long_form:
-        channel_count = 2 if request.channels == ChannelMode.STEREO else 1
-
-        render_long_form_wav(
-            output_path=output_path,
-            mode=request.mode.value,
-            duration_seconds=request.duration_seconds,
-            sample_rate=request.sample_rate,
-            amplitude=request.amplitude,
-            channels=channel_count,
-            frequency_hz=request.frequency_hz or 432.0,
-            left_frequency_hz=request.left_frequency_hz or 200.0,
-            right_frequency_hz=request.right_frequency_hz or 210.0,
-            pulse_frequency_hz=request.pulse_frequency_hz or 10.0,
-            modulation_depth=request.modulation_depth,
-            fade_in_seconds=request.fade_in_seconds,
-            fade_out_seconds=request.fade_out_seconds,
-            seed=request.seed,
-            chunk_frames=request.chunk_frames,
-        )
-
-        final_output_path = encode_audio(
-            source_wav=output_path,
-            output_format=request.output_format.value,
-        )
-
-        response_frequency = (
-            request.frequency_hz
-            if request.mode in {AudioMode.SINE, AudioMode.ISOCHRONIC_TONES}
-            else None
-        )
-
-        return AudioGenerationResponse(
-            id=asset_id,
-            title=request.title,
-            mode=request.mode.value,
-            channels=request.channels.value,
-            frequency_hz=response_frequency,
-            duration_seconds=request.duration_seconds,
-            sample_rate=request.sample_rate,
-            status="generated",
-            output_format=request.output_format.value,
-            file_path=str(final_output_path),
-        )
 
     if request.mode == AudioMode.BINAURAL_BEATS:
         left, right = generate_binaural_channels(

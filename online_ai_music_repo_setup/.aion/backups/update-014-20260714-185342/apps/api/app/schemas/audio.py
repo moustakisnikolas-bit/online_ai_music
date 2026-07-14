@@ -30,8 +30,6 @@ class AudioGenerationRequest(BaseModel):
     loop_crossfade_seconds: float = Field(default=0.25, ge=0, le=30)
     seed: int | None = None
     output_format: OutputFormat = OutputFormat.WAV
-    long_form: bool = False
-    chunk_frames: int = Field(default=65536, ge=1024, le=1048576)
 
     @model_validator(mode="after")
     def validate_mode_configuration(self) -> "AudioGenerationRequest":
