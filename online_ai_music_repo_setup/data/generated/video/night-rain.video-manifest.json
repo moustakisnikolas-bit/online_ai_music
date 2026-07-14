@@ -1,0 +1,11 @@
+{
+  "artwork_filename": "night-rain.png",
+  "audio_filename": "night-rain.wav",
+  "duration_seconds": 600,
+  "frame_rate": 30,
+  "height": 1080,
+  "output_filename": "night-rain.mp4",
+  "render_mode": "static_artwork",
+  "title": "Night Rain",
+  "width": 1920
+}
