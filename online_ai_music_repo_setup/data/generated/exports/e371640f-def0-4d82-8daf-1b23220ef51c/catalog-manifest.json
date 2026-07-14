@@ -1,0 +1,27 @@
+{
+  "approval_required_before_publish": true,
+  "created_at": "2026-07-14T16:23:33.285074+00:00",
+  "files": [
+    {
+      "filename": "0cd94f60-617f-4a60-a564-bf048dc91073.wav",
+      "role": "audio",
+      "sha256": "7d4c4a0e7404df85c39da9cf7105cf782e1b7ca410532c47b630c2f3d4952d00",
+      "size_bytes": 1764044
+    },
+    {
+      "filename": "night-rain-432-sleep-audio-spotify-cover-3953a99fd823.png",
+      "role": "artwork",
+      "sha256": "0f97b757005c43c953fd416b98fc16eca6f2fc6f6c4ad7c5e91c187ac0ef7f61",
+      "size_bytes": 556992
+    },
+    {
+      "filename": "metadata.json",
+      "role": "metadata",
+      "sha256": "a470f198a3bae22528f9aedb39530176b9d9355180f7e6f006c498d314795696",
+      "size_bytes": 821
+    }
+  ],
+  "package_id": "e371640f-def0-4d82-8daf-1b23220ef51c",
+  "publishing_status": "not_published",
+  "title": "Night Rain 432"
+}
