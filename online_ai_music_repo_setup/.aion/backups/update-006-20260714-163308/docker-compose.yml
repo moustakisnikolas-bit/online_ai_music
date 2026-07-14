@@ -19,11 +19,6 @@ services:
     image: redis:7
     ports:
       - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
 
   minio:
     image: minio/minio
@@ -36,17 +31,6 @@ services:
       - "9001:9001"
     volumes:
       - aion-minio:/data
-
-  migrate:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    command: ["alembic", "upgrade", "head"]
-    environment:
-      DATABASE_URL: postgresql+psycopg://aion:aion@postgres:5432/aion
-    depends_on:
-      postgres:
-        condition: service_healthy
 
   api:
     build:
@@ -62,26 +46,20 @@ services:
     volumes:
       - ./data/generated:/app/data/generated
     depends_on:
-      migrate:
-        condition: service_completed_successfully
-      redis:
+      postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
 
   worker:
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
     environment:
-      DATABASE_URL: postgresql+psycopg://aion:aion@postgres:5432/aion
       REDIS_URL: redis://redis:6379/0
-      GENERATED_AUDIO_DIR: /app/data/generated/audio
-    volumes:
-      - ./data/generated:/app/data/generated
     depends_on:
-      migrate:
-        condition: service_completed_successfully
       redis:
-        condition: service_healthy
+        condition: service_started
 
 volumes:
   aion-postgres:

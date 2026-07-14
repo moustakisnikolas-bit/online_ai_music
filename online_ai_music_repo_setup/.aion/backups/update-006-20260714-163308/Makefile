@@ -1,4 +1,4 @@
-.PHONY: help install test lint api worker infra-up infra-down migrate doctor
+.PHONY: help install test lint api infra-up infra-down migrate doctor
 
 help:
 	@echo "AION commands"
@@ -6,7 +6,6 @@ help:
 	@echo "  make test"
 	@echo "  make lint"
 	@echo "  make api"
-	@echo "  make worker"
 	@echo "  make infra-up"
 	@echo "  make infra-down"
 	@echo "  make migrate"
@@ -24,9 +23,6 @@ lint:
 
 api:
 	PYTHONPATH=apps/api .venv/bin/uvicorn app.main:app --reload
-
-worker:
-	PYTHONPATH=apps/api:apps/worker .venv/bin/python apps/worker/app/main.py
 
 infra-up:
 	docker compose up -d --build

@@ -5,10 +5,8 @@ WORKDIR /app
 COPY pyproject.toml /app/pyproject.toml
 RUN pip install --no-cache-dir .
 
-COPY apps/api /app/apps/api
 COPY apps/worker /app/apps/worker
-COPY data /app/data
 
-ENV PYTHONPATH=/app/apps/api:/app/apps/worker
+ENV PYTHONPATH=/app/apps/worker
 
-CMD ["python", "/app/apps/worker/app/main.py"]
+CMD ["python", "-m", "app.main"]
