@@ -1,0 +1,6 @@
+#!/Users/nikolas/Library/CloudStorage/OneDrive-kyndryl/Documents/GitHub/online_ai_music/online_ai_music_repo_setup/.venv/bin/python
+import sys
+from cffi._cffi_gen_src import run
+if __name__ == '__main__':
+    sys.argv[0] = sys.argv[0].removesuffix('.exe')
+    sys.exit(run())
