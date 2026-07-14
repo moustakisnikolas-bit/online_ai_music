@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+COMMAND="${1:-help}"
+
+case "$COMMAND" in
+  help)
+    cat <<EOT
+AION CLI
+
+Commands
+
+  help
+  version
+  doctor
+  generate
+EOT
+  ;;
+
+  version)
+    echo "AION CLI v0.1.0"
+  ;;
+
+  doctor)
+    echo "Checking repository..."
+
+    required=(
+      docs
+      services
+      tools
+      architecture
+    )
+
+    failed=0
+
+    for d in "${required[@]}"; do
+      if [[ ! -d "$d" ]]; then
+        echo "Missing: $d"
+        failed=1
+      fi
+    done
+
+    if [[ "$failed" == "0" ]]; then
+      echo "Repository OK"
+    else
+      exit 1
+    fi
+  ;;
+
+  generate)
+    echo "Generator module will be implemented in Update 004."
+  ;;
+
+  *)
+    echo "Unknown command."
+    exit 1
+  ;;
+esac
