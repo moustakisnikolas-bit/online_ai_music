@@ -11,7 +11,7 @@ API_PATH = Path(__file__).resolve().parents[2] / "api"
 if str(API_PATH) not in sys.path:
     sys.path.insert(0, str(API_PATH))
 
-from app.audio.types import AudioMode, ChannelMode  # noqa: E402
+from app.audio.types import AudioMode  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
 from app.models.audio_job import AudioJob  # noqa: E402
@@ -45,12 +45,7 @@ def process_job(db: Session, job_id: uuid.UUID) -> None:
         request = AudioGenerationRequest(
             title=job.title,
             mode=AudioMode(job.mode),
-            channels=ChannelMode(job.channels),
             frequency_hz=job.frequency_hz,
-            left_frequency_hz=job.left_frequency_hz,
-            right_frequency_hz=job.right_frequency_hz,
-            pulse_frequency_hz=job.pulse_frequency_hz,
-            modulation_depth=job.modulation_depth,
             layers=[
                 ToneLayerRequest(**layer)
                 for layer in (job.layers or [])
@@ -61,8 +56,6 @@ def process_job(db: Session, job_id: uuid.UUID) -> None:
             amplitude=job.amplitude,
             fade_in_seconds=job.fade_in_seconds,
             fade_out_seconds=job.fade_out_seconds,
-            seamless_loop=job.seamless_loop,
-            loop_crossfade_seconds=job.loop_crossfade_seconds,
             seed=job.seed,
         )
 

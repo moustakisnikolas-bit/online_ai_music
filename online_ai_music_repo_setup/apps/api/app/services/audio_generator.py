@@ -5,58 +5,68 @@ from pathlib import Path
 
 from app.audio.dsp import (
     apply_fades,
+    apply_loop_crossfade,
+    generate_binaural_channels,
     generate_brown_noise,
+    generate_isochronic_samples,
     generate_layered_tones,
     generate_pink_noise,
     generate_sine_samples,
     generate_white_noise,
 )
 from app.audio.presets import get_preset
-from app.audio.types import AudioMode
+from app.audio.types import AudioMode, ChannelMode
 from app.schemas.audio import AudioGenerationRequest, AudioGenerationResponse
 
 
-def _samples_for_request(request: AudioGenerationRequest) -> list[float]:
+def _mono_samples(request: AudioGenerationRequest) -> list[float]:
     if request.mode == AudioMode.SINE:
         return generate_sine_samples(
-            frequency_hz=request.frequency_hz or 432.0,
-            duration_seconds=request.duration_seconds,
-            sample_rate=request.sample_rate,
-            amplitude=request.amplitude,
+            request.frequency_hz or 432.0,
+            request.duration_seconds,
+            request.sample_rate,
+            request.amplitude,
         )
 
     if request.mode == AudioMode.LAYERED_TONES:
         return generate_layered_tones(
-            layers=[
-                (layer.frequency_hz, layer.amplitude)
-                for layer in request.layers
-            ],
-            duration_seconds=request.duration_seconds,
-            sample_rate=request.sample_rate,
+            [(layer.frequency_hz, layer.amplitude) for layer in request.layers],
+            request.duration_seconds,
+            request.sample_rate,
         )
 
     if request.mode == AudioMode.WHITE_NOISE:
         return generate_white_noise(
-            duration_seconds=request.duration_seconds,
-            sample_rate=request.sample_rate,
-            amplitude=request.amplitude,
-            seed=request.seed,
+            request.duration_seconds,
+            request.sample_rate,
+            request.amplitude,
+            request.seed,
         )
 
     if request.mode == AudioMode.PINK_NOISE:
         return generate_pink_noise(
-            duration_seconds=request.duration_seconds,
-            sample_rate=request.sample_rate,
-            amplitude=request.amplitude,
-            seed=request.seed,
+            request.duration_seconds,
+            request.sample_rate,
+            request.amplitude,
+            request.seed,
         )
 
     if request.mode == AudioMode.BROWN_NOISE:
         return generate_brown_noise(
+            request.duration_seconds,
+            request.sample_rate,
+            request.amplitude,
+            request.seed,
+        )
+
+    if request.mode == AudioMode.ISOCHRONIC_TONES:
+        return generate_isochronic_samples(
+            carrier_frequency_hz=request.frequency_hz or 220.0,
+            pulse_frequency_hz=request.pulse_frequency_hz or 10.0,
             duration_seconds=request.duration_seconds,
             sample_rate=request.sample_rate,
             amplitude=request.amplitude,
-            seed=request.seed,
+            modulation_depth=request.modulation_depth,
         )
 
     if request.mode == AudioMode.PRESET:
@@ -64,33 +74,74 @@ def _samples_for_request(request: AudioGenerationRequest) -> list[float]:
 
         if preset.mode == "layered_tones":
             return generate_layered_tones(
-                layers=[
-                    (layer.frequency_hz, layer.amplitude)
-                    for layer in preset.layers
-                ],
-                duration_seconds=request.duration_seconds,
-                sample_rate=request.sample_rate,
+                [(layer.frequency_hz, layer.amplitude) for layer in preset.layers],
+                request.duration_seconds,
+                request.sample_rate,
             )
 
         if preset.mode == "pink_noise":
             return generate_pink_noise(
-                duration_seconds=request.duration_seconds,
-                sample_rate=request.sample_rate,
-                amplitude=preset.noise_amplitude,
-                seed=request.seed,
+                request.duration_seconds,
+                request.sample_rate,
+                preset.noise_amplitude,
+                request.seed,
             )
 
         if preset.mode == "brown_noise":
             return generate_brown_noise(
-                duration_seconds=request.duration_seconds,
-                sample_rate=request.sample_rate,
-                amplitude=preset.noise_amplitude,
-                seed=request.seed,
+                request.duration_seconds,
+                request.sample_rate,
+                preset.noise_amplitude,
+                request.seed,
             )
 
-        raise ValueError(f"Unsupported preset mode: {preset.mode}")
+    raise ValueError(f"Unsupported mono audio mode: {request.mode}")
 
-    raise ValueError(f"Unsupported audio mode: {request.mode}")
+
+def _process_channel(
+    samples: list[float],
+    request: AudioGenerationRequest,
+) -> list[float]:
+    samples = apply_fades(
+        samples,
+        request.sample_rate,
+        request.fade_in_seconds,
+        request.fade_out_seconds,
+    )
+
+    if request.seamless_loop:
+        samples = apply_loop_crossfade(
+            samples,
+            request.sample_rate,
+            request.loop_crossfade_seconds,
+        )
+
+    return samples
+
+
+def _write_wav(
+    output_path: Path,
+    sample_rate: int,
+    channels: list[list[float]],
+) -> None:
+    frame_count = len(channels[0])
+
+    if any(len(channel) != frame_count for channel in channels):
+        raise ValueError("All channels must have the same frame count")
+
+    with wave.open(str(output_path), "w") as wav_file:
+        wav_file.setnchannels(len(channels))
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(sample_rate)
+
+        frames = bytearray()
+
+        for frame_index in range(frame_count):
+            for channel in channels:
+                sample = max(-1.0, min(1.0, channel[frame_index]))
+                frames.extend(struct.pack("<h", int(sample * 32767)))
+
+        wav_file.writeframes(bytes(frames))
 
 
 def generate_audio(
@@ -98,33 +149,34 @@ def generate_audio(
     output_dir: Path,
 ) -> AudioGenerationResponse:
     output_dir.mkdir(parents=True, exist_ok=True)
-
     asset_id = str(uuid.uuid4())
     output_path = output_dir / f"{asset_id}.wav"
 
-    samples = _samples_for_request(request)
-    samples = apply_fades(
-        samples=samples,
-        sample_rate=request.sample_rate,
-        fade_in_seconds=request.fade_in_seconds,
-        fade_out_seconds=request.fade_out_seconds,
-    )
+    if request.mode == AudioMode.BINAURAL_BEATS:
+        left, right = generate_binaural_channels(
+            request.left_frequency_hz or 200.0,
+            request.right_frequency_hz or 210.0,
+            request.duration_seconds,
+            request.sample_rate,
+            request.amplitude,
+        )
+        channels = [
+            _process_channel(left, request),
+            _process_channel(right, request),
+        ]
+    else:
+        mono = _process_channel(_mono_samples(request), request)
 
-    with wave.open(str(output_path), "w") as wav_file:
-        wav_file.setnchannels(1)
-        wav_file.setsampwidth(2)
-        wav_file.setframerate(request.sample_rate)
+        if request.channels == ChannelMode.STEREO:
+            channels = [mono[:], mono[:]]
+        else:
+            channels = [mono]
 
-        frames = bytearray()
-        for sample in samples:
-            pcm_value = int(max(-1.0, min(1.0, sample)) * 32767)
-            frames.extend(struct.pack("<h", pcm_value))
-
-        wav_file.writeframes(bytes(frames))
+    _write_wav(output_path, request.sample_rate, channels)
 
     response_frequency = (
         request.frequency_hz
-        if request.mode == AudioMode.SINE
+        if request.mode in {AudioMode.SINE, AudioMode.ISOCHRONIC_TONES}
         else None
     )
 
@@ -132,6 +184,7 @@ def generate_audio(
         id=asset_id,
         title=request.title,
         mode=request.mode.value,
+        channels=request.channels.value,
         frequency_hz=response_frequency,
         duration_seconds=request.duration_seconds,
         sample_rate=request.sample_rate,

@@ -7,11 +7,4 @@ class AudioMode(StrEnum):
     WHITE_NOISE = "white_noise"
     PINK_NOISE = "pink_noise"
     BROWN_NOISE = "brown_noise"
-    BINAURAL_BEATS = "binaural_beats"
-    ISOCHRONIC_TONES = "isochronic_tones"
     PRESET = "preset"
-
-
-class ChannelMode(StrEnum):
-    MONO = "mono"
-    STEREO = "stereo"
