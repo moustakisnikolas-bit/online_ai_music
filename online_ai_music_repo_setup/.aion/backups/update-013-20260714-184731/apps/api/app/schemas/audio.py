@@ -2,7 +2,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.audio.types import AudioMode, ChannelMode, OutputFormat
+from app.audio.types import AudioMode, ChannelMode
 
 
 class ToneLayerRequest(BaseModel):
@@ -29,7 +29,6 @@ class AudioGenerationRequest(BaseModel):
     seamless_loop: bool = False
     loop_crossfade_seconds: float = Field(default=0.25, ge=0, le=30)
     seed: int | None = None
-    output_format: OutputFormat = OutputFormat.WAV
 
     @model_validator(mode="after")
     def validate_mode_configuration(self) -> "AudioGenerationRequest":
@@ -73,7 +72,6 @@ class AudioGenerationResponse(BaseModel):
     duration_seconds: int
     sample_rate: int
     status: str
-    output_format: str
     file_path: str
 
     @property

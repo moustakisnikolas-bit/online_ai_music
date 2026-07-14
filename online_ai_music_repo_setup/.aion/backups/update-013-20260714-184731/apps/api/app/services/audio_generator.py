@@ -16,7 +16,6 @@ from app.audio.dsp import (
 )
 from app.audio.presets import get_preset
 from app.audio.types import AudioMode, ChannelMode
-from app.services.audio_encoding import encode_audio
 from app.schemas.audio import AudioGenerationRequest, AudioGenerationResponse
 
 
@@ -175,11 +174,6 @@ def generate_audio(
 
     _write_wav(output_path, request.sample_rate, channels)
 
-    final_output_path = encode_audio(
-        source_wav=output_path,
-        output_format=request.output_format.value,
-    )
-
     response_frequency = (
         request.frequency_hz
         if request.mode in {AudioMode.SINE, AudioMode.ISOCHRONIC_TONES}
@@ -195,8 +189,7 @@ def generate_audio(
         duration_seconds=request.duration_seconds,
         sample_rate=request.sample_rate,
         status="generated",
-        output_format=request.output_format.value,
-        file_path=str(final_output_path),
+        file_path=str(output_path),
     )
 
 

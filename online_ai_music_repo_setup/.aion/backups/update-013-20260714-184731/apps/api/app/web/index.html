@@ -225,16 +225,10 @@
         <label id="preset-group" class="hidden">
           Preset
           <select id="preset">
-            <option value="">Loading presets…</option>
-          </select>
-        </label>
-
-        <label>
-          Output format
-          <select id="output-format">
-            <option value="wav" selected>WAV</option>
-            <option value="flac">FLAC</option>
-            <option value="mp3">MP3</option>
+            <option value="calm-432">Calm 432</option>
+            <option value="focus-alpha-bed">Focus Alpha Bed</option>
+            <option value="deep-brown">Deep Brown</option>
+            <option value="soft-pink">Soft Pink</option>
           </select>
         </label>
 
@@ -313,34 +307,8 @@
     }
   }
 
-  async function loadPresets() {
-    const presetSelect = document.getElementById("preset");
-
-    try {
-      const response = await fetch("/api/v1/audio/presets");
-      const presets = await response.json();
-
-      if (!response.ok) {
-        throw new Error("Unable to load presets.");
-      }
-
-      presetSelect.innerHTML = "";
-
-      for (const preset of presets) {
-        const option = document.createElement("option");
-        option.value = preset.name;
-        option.textContent = `${preset.label} — ${preset.description}`;
-        presetSelect.appendChild(option);
-      }
-    } catch (exception) {
-      presetSelect.innerHTML =
-        '<option value="calm-432">Calm 432</option>';
-    }
-  }
-
   mode.addEventListener("change", updateConditionalFields);
   updateConditionalFields();
-  loadPresets();
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -361,8 +329,7 @@
       amplitude: Number(document.getElementById("amplitude").value),
       fade_in_seconds: Number(document.getElementById("fade-in").value),
       fade_out_seconds: Number(document.getElementById("fade-out").value),
-      seed: Number(document.getElementById("seed").value),
-      output_format: document.getElementById("output-format").value
+      seed: Number(document.getElementById("seed").value)
     };
 
     if (!["white_noise", "pink_noise", "brown_noise", "preset", "binaural_beats"].includes(selectedMode)) {
@@ -398,23 +365,6 @@
       }
 
       const filename = body.file_path.split("/").pop();
-
-      if (!filename.toLowerCase().endsWith(".wav")) {
-        document.getElementById("filename").textContent = filename;
-        document.getElementById("result-mode").textContent = body.mode;
-        document.getElementById("result-duration").textContent =
-          document.getElementById("duration").value;
-        document.getElementById("result-rate").textContent =
-          document.getElementById("sample-rate").value;
-        document.getElementById("player").src = "";
-        document.getElementById("download").href =
-          `/api/v1/audio/files/${encodeURIComponent(filename)}`;
-        success.style.display = "block";
-        result.classList.add("visible");
-        status.textContent = "Completed";
-        return;
-      }
-
       const metadataUrl = `/api/v1/audio/assets/${encodeURIComponent(filename)}`;
       const metadataResponse = await fetch(metadataUrl);
       const metadata = await metadataResponse.json();

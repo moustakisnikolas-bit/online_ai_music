@@ -15,9 +15,3 @@ class AudioMode(StrEnum):
 class ChannelMode(StrEnum):
     MONO = "mono"
     STEREO = "stereo"
-
-
-class OutputFormat(StrEnum):
-    WAV = "wav"
-    FLAC = "flac"
-    MP3 = "mp3"
