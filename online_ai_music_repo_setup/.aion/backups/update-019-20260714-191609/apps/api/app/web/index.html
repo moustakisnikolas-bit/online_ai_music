@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>AION Ambient Audio Factory</title>
+  <style>
+    :root {
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+      color-scheme: dark;
+      background: #0d1117;
+      color: #e6edf3;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, #16233a 0, transparent 35%),
+        #0d1117;
+    }
+
+    main {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 32px 20px 64px;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+      font-size: clamp(2rem, 5vw, 3.4rem);
+    }
+
+    .subtitle {
+      color: #9da7b3;
+      margin-bottom: 32px;
+    }
+
+    .panel {
+      background: rgba(22, 27, 34, 0.94);
+      border: 1px solid #30363d;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 18px 50px rgba(0,0,0,.22);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    label {
+      display: grid;
+      gap: 7px;
+      font-size: .9rem;
+      color: #c9d1d9;
+    }
+
+    input, select, button {
+      font: inherit;
+    }
+
+    input, select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 11px 12px;
+      border-radius: 9px;
+      border: 1px solid #3d444d;
+      background: #0d1117;
+      color: #e6edf3;
+    }
+
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 12px 18px;
+      cursor: pointer;
+      background: #238636;
+      color: white;
+      font-weight: 700;
+    }
+
+    button:disabled {
+      opacity: .55;
+      cursor: progress;
+    }
+
+    .actions {
+      margin-top: 20px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .status {
+      color: #9da7b3;
+      min-height: 24px;
+    }
+
+    .error {
+      color: #ff7b72;
+      white-space: pre-wrap;
+    }
+
+    .result {
+      display: none;
+    }
+
+    .result.visible {
+      display: block;
+    }
+
+    audio {
+      width: 100%;
+      margin: 16px 0;
+    }
+
+    code {
+      word-break: break-word;
+      color: #79c0ff;
+    }
+
+    a.download {
+      display: inline-block;
+      padding: 10px 14px;
+      border-radius: 9px;
+      background: #1f6feb;
+      color: white;
+      text-decoration: none;
+      font-weight: 700;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .notice {
+      padding: 12px;
+      border-radius: 10px;
+      background: #1b2638;
+      color: #b6c2cf;
+      margin-top: 18px;
+      font-size: .9rem;
+    }
+  </style>
+</head>
+<body>
+<main>
+  <h1>AION Ambient Audio Factory</h1>
+  <p class="subtitle">
+    Generate original ambient audio assets directly from the browser.
+  </p>
+
+  <section class="panel">
+    <form id="audio-form">
+      <div class="grid">
+        <label>
+          Title
+          <input id="title" value="AION Test Sound" required>
+        </label>
+
+        <label>
+          Mode
+          <select id="mode">
+            <option value="sine">Sine tone</option>
+            <option value="white_noise">White noise</option>
+            <option value="pink_noise">Pink noise</option>
+            <option value="brown_noise">Brown noise</option>
+            <option value="binaural_beats">Binaural beats</option>
+            <option value="isochronic_tones">Isochronic tones</option>
+            <option value="preset">Preset</option>
+          </select>
+        </label>
+
+        <label>
+          Channels
+          <select id="channels">
+            <option value="mono">Mono</option>
+            <option value="stereo">Stereo</option>
+          </select>
+        </label>
+
+        <label>
+          Duration (seconds)
+          <input id="duration" type="number" value="5" min="1" max="3600">
+        </label>
+
+        <label>
+          Sample rate
+          <select id="sample-rate">
+            <option value="8000">8000</option>
+            <option value="44100" selected>44100</option>
+            <option value="48000">48000</option>
+          </select>
+        </label>
+
+        <label>
+          Amplitude
+          <input id="amplitude" type="number" value="0.1" min="0.01" max="1" step="0.01">
+        </label>
+
+        <label id="frequency-group">
+          Frequency (Hz)
+          <input id="frequency" type="number" value="432" min="1" max="20000">
+        </label>
+
+        <label id="left-frequency-group" class="hidden">
+          Left frequency (Hz)
+          <input id="left-frequency" type="number" value="200" min="1" max="20000">
+        </label>
+
+        <label id="right-frequency-group" class="hidden">
+          Right frequency (Hz)
+          <input id="right-frequency" type="number" value="210" min="1" max="20000">
+        </label>
+
+        <label id="pulse-frequency-group" class="hidden">
+          Pulse frequency (Hz)
+          <input id="pulse-frequency" type="number" value="10" min="0.1" max="100" step="0.1">
+        </label>
+
+        <label id="preset-group" class="hidden">
+          Preset
+          <select id="preset">
+            <option value="">Loading presets…</option>
+          </select>
+        </label>
+
+        <label>
+          Output format
+          <select id="output-format">
+            <option value="wav" selected>WAV</option>
+            <option value="flac">FLAC</option>
+            <option value="mp3">MP3</option>
+          </select>
+        </label>
+
+        <label>
+          Fade in (seconds)
+          <input id="fade-in" type="number" value="0.1" min="0" max="60" step="0.1">
+        </label>
+
+        <label>
+          Fade out (seconds)
+          <input id="fade-out" type="number" value="0.1" min="0" max="60" step="0.1">
+        </label>
+
+        <label>
+          Random seed
+          <input id="seed" type="number" value="42">
+        </label>
+      </div>
+
+      <div class="actions">
+        <button id="submit" type="submit">Generate audio</button>
+        <span id="status" class="status"></span>
+      </div>
+
+      <div class="notice">
+        Frequency-based output is provided as ambient and relaxation content.
+        It is not medical treatment and does not promise therapeutic outcomes.
+      </div>
+    </form>
+  </section>
+
+  <section id="result" class="panel result">
+    <h2>Generated Asset</h2>
+    <div id="error" class="error"></div>
+    <div id="success">
+      <audio id="player" controls></audio>
+      <p><strong>Filename:</strong> <code id="filename"></code></p>
+      <p><strong>Mode:</strong> <span id="result-mode"></span></p>
+      <p><strong>Duration:</strong> <span id="result-duration"></span> seconds</p>
+      <p><strong>Sample rate:</strong> <span id="result-rate"></span> Hz</p>
+      <a id="download" class="download" href="#">Download WAV</a>
+    </div>
+  </section>
+</main>
+
+<script>
+  const form = document.getElementById("audio-form");
+  const mode = document.getElementById("mode");
+  const channels = document.getElementById("channels");
+  const submit = document.getElementById("submit");
+  const status = document.getElementById("status");
+  const result = document.getElementById("result");
+  const error = document.getElementById("error");
+  const success = document.getElementById("success");
+
+  function updateConditionalFields() {
+    const selected = mode.value;
+    const binaural = selected === "binaural_beats";
+    const isochronic = selected === "isochronic_tones";
+    const preset = selected === "preset";
+
+    document.getElementById("left-frequency-group").classList.toggle("hidden", !binaural);
+    document.getElementById("right-frequency-group").classList.toggle("hidden", !binaural);
+    document.getElementById("pulse-frequency-group").classList.toggle("hidden", !isochronic);
+    document.getElementById("preset-group").classList.toggle("hidden", !preset);
+    document.getElementById("frequency-group").classList.toggle(
+      "hidden",
+      ["white_noise", "pink_noise", "brown_noise", "preset", "binaural_beats"].includes(selected)
+    );
+
+    if (binaural) {
+      channels.value = "stereo";
+      channels.disabled = true;
+    } else {
+      channels.disabled = false;
+    }
+  }
+
+  async function loadPresets() {
+    const presetSelect = document.getElementById("preset");
+
+    try {
+      const response = await fetch("/api/v1/audio/presets");
+      const presets = await response.json();
+
+      if (!response.ok) {
+        throw new Error("Unable to load presets.");
+      }
+
+      presetSelect.innerHTML = "";
+
+      for (const preset of presets) {
+        const option = document.createElement("option");
+        option.value = preset.name;
+        option.textContent = `${preset.label} — ${preset.description}`;
+        presetSelect.appendChild(option);
+      }
+    } catch (exception) {
+      presetSelect.innerHTML =
+        '<option value="calm-432">Calm 432</option>';
+    }
+  }
+
+  mode.addEventListener("change", updateConditionalFields);
+  updateConditionalFields();
+  loadPresets();
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    submit.disabled = true;
+    status.textContent = "Generating…";
+    result.classList.remove("visible");
+    error.textContent = "";
+
+    const selectedMode = mode.value;
+
+    const payload = {
+      title: document.getElementById("title").value,
+      mode: selectedMode,
+      channels: channels.value,
+      duration_seconds: Number(document.getElementById("duration").value),
+      sample_rate: Number(document.getElementById("sample-rate").value),
+      amplitude: Number(document.getElementById("amplitude").value),
+      fade_in_seconds: Number(document.getElementById("fade-in").value),
+      fade_out_seconds: Number(document.getElementById("fade-out").value),
+      seed: Number(document.getElementById("seed").value),
+      output_format: document.getElementById("output-format").value
+    };
+
+    if (!["white_noise", "pink_noise", "brown_noise", "preset", "binaural_beats"].includes(selectedMode)) {
+      payload.frequency_hz = Number(document.getElementById("frequency").value);
+    }
+
+    if (selectedMode === "binaural_beats") {
+      payload.channels = "stereo";
+      payload.left_frequency_hz = Number(document.getElementById("left-frequency").value);
+      payload.right_frequency_hz = Number(document.getElementById("right-frequency").value);
+    }
+
+    if (selectedMode === "isochronic_tones") {
+      payload.pulse_frequency_hz = Number(document.getElementById("pulse-frequency").value);
+      payload.modulation_depth = 1.0;
+    }
+
+    if (selectedMode === "preset") {
+      payload.preset_name = document.getElementById("preset").value;
+    }
+
+    try {
+      const response = await fetch("/api/v1/audio/generate", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify(payload)
+      });
+
+      const body = await response.json();
+
+      if (!response.ok) {
+        throw new Error(JSON.stringify(body, null, 2));
+      }
+
+      const filename = body.file_path.split("/").pop();
+
+      if (!filename.toLowerCase().endsWith(".wav")) {
+        document.getElementById("filename").textContent = filename;
+        document.getElementById("result-mode").textContent = body.mode;
+        document.getElementById("result-duration").textContent =
+          document.getElementById("duration").value;
+        document.getElementById("result-rate").textContent =
+          document.getElementById("sample-rate").value;
+        document.getElementById("player").src = "";
+        document.getElementById("download").href =
+          `/api/v1/audio/files/${encodeURIComponent(filename)}`;
+        success.style.display = "block";
+        result.classList.add("visible");
+        status.textContent = "Completed";
+        return;
+      }
+
+      const metadataUrl = `/api/v1/audio/assets/${encodeURIComponent(filename)}`;
+      const metadataResponse = await fetch(metadataUrl);
+      const metadata = await metadataResponse.json();
+
+      if (!metadataResponse.ok) {
+        throw new Error(JSON.stringify(metadata, null, 2));
+      }
+
+      document.getElementById("filename").textContent = metadata.filename;
+      document.getElementById("result-mode").textContent = body.mode;
+      document.getElementById("result-duration").textContent = metadata.duration_seconds;
+      document.getElementById("result-rate").textContent = metadata.sample_rate;
+      document.getElementById("player").src = metadata.download_url;
+      document.getElementById("download").href = metadata.download_url;
+
+      success.style.display = "block";
+      result.classList.add("visible");
+      status.textContent = "Completed";
+    } catch (exception) {
+      success.style.display = "none";
+      error.textContent = exception.message;
+      result.classList.add("visible");
+      status.textContent = "Failed";
+    } finally {
+      submit.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>

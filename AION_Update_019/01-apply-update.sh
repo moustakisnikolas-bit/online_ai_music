@@ -1,3 +1,31 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+TARGET="${1:-/Users/nikolas/Documents/GitHub/online_ai_music/online_ai_music_repo_setup}"
+
+if [[ ! -d "${TARGET}" ]]; then
+  echo "ERROR: Target directory does not exist: ${TARGET}" >&2
+  exit 1
+fi
+
+cd "${TARGET}"
+
+BACKUP_DIR="${TARGET}/.aion/backups/update-019-$(date +%Y%m%d-%H%M%S)"
+mkdir -p "${BACKUP_DIR}"
+
+for file in \
+  "apps/api/app/web/index.html"; do
+  if [[ -f "${file}" ]]; then
+    mkdir -p "${BACKUP_DIR}/$(dirname "${file}")"
+    cp "${file}" "${BACKUP_DIR}/${file}"
+  fi
+done
+
+mkdir -p apps/api/tests
+mkdir -p docs/11-operations
+mkdir -p docs/00-overview
+
+cat > apps/api/app/web/index.html <<'EOF'
 <!doctype html>
 <html lang="en">
 <head>
@@ -756,3 +784,266 @@
 </script>
 </body>
 </html>
+EOF
+
+cat > apps/api/app/api/routes/visual_files.py <<'EOF'
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import FileResponse
+
+router = APIRouter(prefix="/visuals/files", tags=["visual-files"])
+
+ARTWORK_DIR = Path("data/generated/artwork")
+
+
+@router.get("/{filename}")
+def download_visual_file(filename: str) -> FileResponse:
+    if not filename or Path(filename).name != filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid filename.",
+        )
+
+    if Path(filename).suffix.lower() not in {".png", ".jpg", ".jpeg"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Unsupported visual file type.",
+        )
+
+    base = ARTWORK_DIR.resolve()
+    path = (base / filename).resolve()
+
+    if path.parent != base:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid file path.",
+        )
+
+    if not path.exists():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Visual file not found.",
+        )
+
+    media_type = {
+        ".png": "image/png",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+    }[path.suffix.lower()]
+
+    return FileResponse(
+        path=path,
+        media_type=media_type,
+        filename=path.name,
+    )
+EOF
+
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("apps/api/app/main.py")
+content = path.read_text(encoding="utf-8")
+
+import_line = "from app.api.routes.visual_files import router as visual_files_router\n"
+
+if import_line not in content:
+    marker = "from app.api.routes.visuals import router as visuals_router\n"
+
+    if marker not in content:
+        raise SystemExit("Expected visuals import was not found.")
+
+    content = content.replace(marker, marker + import_line)
+
+route_line = 'app.include_router(visual_files_router, prefix="/api/v1")\n'
+
+if route_line not in content:
+    marker = 'app.include_router(visuals_router, prefix="/api/v1")\n'
+
+    if marker not in content:
+        raise SystemExit("Expected visuals route registration was not found.")
+
+    content = content.replace(marker, marker + route_line)
+
+path.write_text(content, encoding="utf-8")
+PY
+
+cat > apps/api/tests/test_visual_files_api.py <<'EOF'
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+from PIL import Image
+
+from app.main import app
+
+client = TestClient(app)
+
+
+def test_visual_file_endpoint() -> None:
+    output_dir = Path("data/generated/artwork")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    path = output_dir / "ui-test-image.png"
+    Image.new("RGB", (10, 10)).save(path)
+
+    try:
+        response = client.get(
+            "/api/v1/visuals/files/ui-test-image.png"
+        )
+
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+    finally:
+        path.unlink(missing_ok=True)
+EOF
+
+cat > apps/api/tests/test_complete_ui_workflow.py <<'EOF'
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+client = TestClient(app)
+
+
+def test_complete_ui_contains_all_workflow_steps() -> None:
+    response = client.get("/")
+
+    assert response.status_code == 200
+
+    expected_text = [
+        "Run complete workflow",
+        "Audio",
+        "Metadata",
+        "Artwork",
+        "Video",
+        "Export bundle",
+        "Download export ZIP",
+    ]
+
+    for text in expected_text:
+        assert text in response.text
+EOF
+
+cat > docs/11-operations/complete-local-workflow.md <<'EOF'
+# Complete Local Workflow
+
+## Start the Application
+
+```bash
+make api
+```
+
+Open:
+
+```text
+http://127.0.0.1:8000/
+```
+
+## Workflow
+
+The complete browser workflow performs:
+
+1. audio generation;
+2. metadata generation;
+3. artwork generation;
+4. optional MP4 rendering;
+5. export ZIP creation.
+
+## Generated Outputs
+
+### Audio
+
+Stored under:
+
+```text
+data/generated/audio
+```
+
+### Artwork
+
+Stored under:
+
+```text
+data/generated/artwork
+```
+
+### Video
+
+Stored under:
+
+```text
+data/generated/video
+```
+
+### Export Bundle
+
+Stored under:
+
+```text
+data/generated/exports
+```
+
+## FFmpeg Behavior
+
+When FFmpeg is unavailable:
+
+- WAV generation still works;
+- metadata generation still works;
+- artwork generation still works;
+- MP4 generation is skipped or returns an explicit error;
+- the export bundle can still be created without video.
+
+## Publishing
+
+The ZIP is a preparation package.
+
+It is not uploaded automatically and should be reviewed before distribution.
+EOF
+
+cat > docs/00-overview/mvp-user-flow.md <<'EOF'
+# AION MVP User Flow
+
+## Input
+
+The user chooses:
+
+- content title;
+- purpose;
+- audio mode;
+- frequency;
+- duration;
+- channels;
+- output format;
+- artwork preset.
+
+## Processing
+
+AION creates:
+
+- original audio;
+- metadata;
+- artwork;
+- optional video;
+- catalog manifest;
+- export ZIP.
+
+## Output
+
+The user can preview and download the generated assets.
+
+## Current Boundary
+
+The MVP ends at export-package creation.
+
+Uploading to YouTube or music distributors remains a manual, reviewed action.
+EOF
+
+echo "AION Update 019 applied successfully."
+echo "Backup created at: ${BACKUP_DIR}"
+echo
+echo "Remaining planned updates after this one: 1"
+echo
+echo "Run:"
+echo "  cd \"${TARGET}\""
+echo "  make test"
+echo "  make api"

@@ -1,0 +1,27 @@
+{
+  "approval_required_before_publish": true,
+  "created_at": "2026-07-14T16:17:18.757109+00:00",
+  "files": [
+    {
+      "filename": "610bb6e4-3020-4a89-8143-4375ed4d518a.wav",
+      "role": "audio",
+      "sha256": "30c43d5fc50ab6303f9076929ce8323ce4df39bd8b0def0c84e3159d261e9f0d",
+      "size_bytes": 1764044
+    },
+    {
+      "filename": "night-rain-432-meditation-audio-spotify-cover-58526d0d27d2.png",
+      "role": "artwork",
+      "sha256": "9880e1ea645265f4fd0f6cbd14c19de6607c14c7fff6161a0ea95327b0183775",
+      "size_bytes": 547668
+    },
+    {
+      "filename": "metadata.json",
+      "role": "metadata",
+      "sha256": "5910e3d33f1c3f705f9c3a9136f5f09dde5878d99f2936bd0ff6c85b60261fc2",
+      "size_bytes": 841
+    }
+  ],
+  "package_id": "0781b2ef-c249-484b-86f7-50e3f9a4ef2f",
+  "publishing_status": "not_published",
+  "title": "Night Rain 432"
+}
