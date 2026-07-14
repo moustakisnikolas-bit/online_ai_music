@@ -11,10 +11,16 @@ def create_audio_job(db: Session, payload: AudioJobCreate) -> AudioJob:
     job = AudioJob(
         project_id=payload.project_id,
         title=payload.title,
+        mode=payload.mode.value,
         frequency_hz=payload.frequency_hz,
+        layers=[layer.model_dump() for layer in payload.layers],
+        preset_name=payload.preset_name,
         duration_seconds=payload.duration_seconds,
         sample_rate=payload.sample_rate,
         amplitude=payload.amplitude,
+        fade_in_seconds=payload.fade_in_seconds,
+        fade_out_seconds=payload.fade_out_seconds,
+        seed=payload.seed,
         status="queued",
     )
     db.add(job)

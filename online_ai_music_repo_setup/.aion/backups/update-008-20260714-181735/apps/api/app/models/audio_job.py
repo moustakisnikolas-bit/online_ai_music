@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,16 +23,10 @@ class AudioJob(Base):
         index=True,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    mode: Mapped[str] = mapped_column(String(50), nullable=False, default="sine")
-    frequency_hz: Mapped[float | None] = mapped_column(Float, nullable=True)
-    layers: Mapped[list[dict]] = mapped_column(JSON, nullable=False, default=list)
-    preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    frequency_hz: Mapped[float] = mapped_column(Float, nullable=False)
     duration_seconds: Mapped[int] = mapped_column(Integer, nullable=False)
     sample_rate: Mapped[int] = mapped_column(Integer, nullable=False, default=44100)
     amplitude: Mapped[float] = mapped_column(Float, nullable=False, default=0.2)
-    fade_in_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
-    fade_out_seconds: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
-    seed: Mapped[int | None] = mapped_column(Integer, nullable=True)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="queued", index=True)
     output_file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

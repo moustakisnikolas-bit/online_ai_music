@@ -1,4 +1,5 @@
 import json
+import os
 import sys
 import uuid
 from datetime import datetime, timezone
@@ -11,12 +12,11 @@ API_PATH = Path(__file__).resolve().parents[2] / "api"
 if str(API_PATH) not in sys.path:
     sys.path.insert(0, str(API_PATH))
 
-from app.audio.types import AudioMode  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.db.session import SessionLocal  # noqa: E402
 from app.models.audio_job import AudioJob  # noqa: E402
-from app.schemas.audio import AudioGenerationRequest, ToneLayerRequest  # noqa: E402
-from app.services.audio_generator import generate_audio  # noqa: E402
+from app.schemas.audio import AudioGenerationRequest  # noqa: E402
+from app.services.audio_generator import generate_sine_wave  # noqa: E402
 from app.services.audio_queue import QUEUE_NAME  # noqa: E402
 
 
@@ -42,25 +42,14 @@ def process_job(db: Session, job_id: uuid.UUID) -> None:
     db.commit()
 
     try:
-        request = AudioGenerationRequest(
-            title=job.title,
-            mode=AudioMode(job.mode),
-            frequency_hz=job.frequency_hz,
-            layers=[
-                ToneLayerRequest(**layer)
-                for layer in (job.layers or [])
-            ],
-            preset_name=job.preset_name,
-            duration_seconds=job.duration_seconds,
-            sample_rate=job.sample_rate,
-            amplitude=job.amplitude,
-            fade_in_seconds=job.fade_in_seconds,
-            fade_out_seconds=job.fade_out_seconds,
-            seed=job.seed,
-        )
-
-        result = generate_audio(
-            request=request,
+        result = generate_sine_wave(
+            request=AudioGenerationRequest(
+                title=job.title,
+                frequency_hz=job.frequency_hz,
+                duration_seconds=job.duration_seconds,
+                sample_rate=job.sample_rate,
+                amplitude=job.amplitude,
+            ),
             output_dir=settings.audio_output_path,
         )
 

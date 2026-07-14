@@ -1,4 +1,4 @@
-.PHONY: help setup setup-macos install test lint api worker infra-up infra-down migrate doctor
+.PHONY: help setup setup-macos install test lint api worker infra-up infra-down migrate doctor smoke reset-local
 
 help:
 	@echo "AION commands"
@@ -12,6 +12,8 @@ help:
 	@echo "  make infra-down"
 	@echo "  make migrate"
 	@echo "  make doctor"
+	@echo "  make smoke"
+	@echo "  make reset-local"
 
 setup-macos:
 	./scripts/dev/install-python-312-macos.sh
@@ -65,3 +67,9 @@ migrate:
 doctor:
 	./tools/aion/aion doctor
 	./scripts/dev/doctor-local.sh
+
+smoke:
+	./scripts/dev/docker-smoke-test.sh
+
+reset-local:
+	./scripts/ops/docker-reset-local.sh
