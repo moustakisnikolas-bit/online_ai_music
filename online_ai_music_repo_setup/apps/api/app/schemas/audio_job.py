@@ -17,8 +17,8 @@ class AudioJobCreate(BaseModel):
     duration_seconds: int = Field(gt=0, le=3600)
     sample_rate: int = Field(default=44100, ge=8000, le=192000)
     amplitude: float = Field(default=0.2, gt=0, le=1.0)
-    fade_in_seconds: float = Field(default=1.0, ge=0, le=60)
-    fade_out_seconds: float = Field(default=1.0, ge=0, le=60)
+    fade_in_seconds: float = Field(default=0.1, ge=0, le=60)
+    fade_out_seconds: float = Field(default=0.1, ge=0, le=60)
     seed: int | None = None
 
 

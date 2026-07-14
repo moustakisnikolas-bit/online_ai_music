@@ -122,10 +122,17 @@ def generate_audio(
 
         wav_file.writeframes(bytes(frames))
 
+    response_frequency = (
+        request.frequency_hz
+        if request.mode == AudioMode.SINE
+        else None
+    )
+
     return AudioGenerationResponse(
         id=asset_id,
         title=request.title,
         mode=request.mode.value,
+        frequency_hz=response_frequency,
         duration_seconds=request.duration_seconds,
         sample_rate=request.sample_rate,
         status="generated",
