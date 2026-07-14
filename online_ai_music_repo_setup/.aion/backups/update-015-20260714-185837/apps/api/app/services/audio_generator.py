@@ -9,9 +9,6 @@ from app.audio.dsp import (
     generate_binaural_channels,
     generate_brown_noise,
     generate_isochronic_samples,
-    generate_rain_texture,
-    generate_wind_texture,
-    mix_tracks,
     generate_layered_tones,
     generate_pink_noise,
     generate_sine_samples,
@@ -73,62 +70,6 @@ def _mono_samples(request: AudioGenerationRequest) -> list[float]:
             amplitude=request.amplitude,
             modulation_depth=request.modulation_depth,
         )
-
-    if request.mode == AudioMode.MIXED_AMBIENT:
-        tracks: list[tuple[list[float], float]] = []
-
-        if request.noise_mode == AudioMode.WHITE_NOISE:
-            noise = generate_white_noise(
-                request.duration_seconds,
-                request.sample_rate,
-                request.amplitude,
-                request.seed,
-            )
-        elif request.noise_mode == AudioMode.PINK_NOISE:
-            noise = generate_pink_noise(
-                request.duration_seconds,
-                request.sample_rate,
-                request.amplitude,
-                request.seed,
-            )
-        elif request.noise_mode == AudioMode.BROWN_NOISE:
-            noise = generate_brown_noise(
-                request.duration_seconds,
-                request.sample_rate,
-                request.amplitude,
-                request.seed,
-            )
-        else:
-            raise ValueError("Unsupported mixed ambient noise mode")
-
-        tracks.append((noise, request.noise_gain))
-
-        if request.layers:
-            tones = generate_layered_tones(
-                [(layer.frequency_hz, layer.amplitude) for layer in request.layers],
-                request.duration_seconds,
-                request.sample_rate,
-            )
-            tracks.append((tones, request.tone_gain))
-
-        if request.texture_mode.value == "rain":
-            texture = generate_rain_texture(
-                request.duration_seconds,
-                request.sample_rate,
-                request.amplitude,
-                request.seed,
-            )
-            tracks.append((texture, request.texture_gain))
-        elif request.texture_mode.value == "wind":
-            texture = generate_wind_texture(
-                request.duration_seconds,
-                request.sample_rate,
-                request.amplitude,
-                request.seed,
-            )
-            tracks.append((texture, request.texture_gain))
-
-        return mix_tracks(tracks)
 
     if request.mode == AudioMode.PRESET:
         preset = get_preset(request.preset_name or "")

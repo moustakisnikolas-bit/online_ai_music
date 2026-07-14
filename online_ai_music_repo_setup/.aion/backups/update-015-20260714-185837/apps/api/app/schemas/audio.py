@@ -2,7 +2,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field, model_validator
 
-from app.audio.types import AudioMode, ChannelMode, OutputFormat, TextureMode
+from app.audio.types import AudioMode, ChannelMode, OutputFormat
 
 
 class ToneLayerRequest(BaseModel):
@@ -30,11 +30,6 @@ class AudioGenerationRequest(BaseModel):
     loop_crossfade_seconds: float = Field(default=0.25, ge=0, le=30)
     seed: int | None = None
     output_format: OutputFormat = OutputFormat.WAV
-    noise_mode: AudioMode | None = None
-    noise_gain: float = Field(default=0.65, ge=0, le=1.0)
-    tone_gain: float = Field(default=0.35, ge=0, le=1.0)
-    texture_mode: TextureMode = TextureMode.NONE
-    texture_gain: float = Field(default=0.25, ge=0, le=1.0)
     long_form: bool = False
     chunk_frames: int = Field(default=65536, ge=1024, le=1048576)
 
@@ -60,17 +55,6 @@ class AudioGenerationRequest(BaseModel):
                 raise ValueError(
                     "frequency_hz and pulse_frequency_hz are required "
                     "for isochronic_tones"
-                )
-
-        if self.mode == AudioMode.MIXED_AMBIENT:
-            if self.noise_mode not in {
-                AudioMode.WHITE_NOISE,
-                AudioMode.PINK_NOISE,
-                AudioMode.BROWN_NOISE,
-            }:
-                raise ValueError(
-                    "mixed_ambient requires noise_mode to be white_noise, "
-                    "pink_noise or brown_noise"
                 )
 
         if self.fade_in_seconds + self.fade_out_seconds > self.duration_seconds:

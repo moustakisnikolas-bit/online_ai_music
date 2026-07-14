@@ -9,7 +9,6 @@ class AudioMode(StrEnum):
     BROWN_NOISE = "brown_noise"
     BINAURAL_BEATS = "binaural_beats"
     ISOCHRONIC_TONES = "isochronic_tones"
-    MIXED_AMBIENT = "mixed_ambient"
     PRESET = "preset"
 
 
@@ -22,9 +21,3 @@ class OutputFormat(StrEnum):
     WAV = "wav"
     FLAC = "flac"
     MP3 = "mp3"
-
-
-class TextureMode(StrEnum):
-    NONE = "none"
-    RAIN = "rain"
-    WIND = "wind"
