@@ -77,6 +77,22 @@ Goal: generation speed that can sustain a real publishing cadence.
 Definition of done: a 60-minute stereo track renders in seconds, not
 minutes.
 
+Status: done for the direct (non-chunked) generation path. A 4-layer
+60-minute stereo `mixed_ambient` render went from 320.8s to 27.2s (numpy
+vectorization plus streaming layer mixing, so only one layer's array is
+held in memory at a time instead of all of them at once, which was the
+actual bottleneck on memory-constrained machines). Two follow-ups remain
+open, deliberately deferred rather than rushed:
+
+- `long_form_audio.py` (the `long_form=True` chunked renderer, meant for
+  genuinely long, memory-bounded output) is untouched and still uses a
+  per-sample Python loop; it needs its own pass, particularly to carry
+  brown-noise filter state correctly across chunk boundaries.
+- Pink noise's 6-section parallel filter bank (6 sequential `lfilter`
+  calls) is the dominant remaining cost at longer durations; combining it
+  into a single higher-order filter would speed it up further but needs
+  care to avoid silently changing its frequency response.
+
 ## Milestone 4: YouTube Publishing Integration
 
 Goal: auto-upload generated video packages to a connected YouTube channel.

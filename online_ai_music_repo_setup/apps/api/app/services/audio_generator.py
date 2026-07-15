@@ -1,7 +1,8 @@
-import struct
 import uuid
 import wave
 from pathlib import Path
+
+import numpy as np
 
 from app.audio.dsp import (
     apply_fades,
@@ -24,7 +25,7 @@ from app.services.long_form_audio import render_long_form_wav
 from app.schemas.audio import AudioGenerationRequest, AudioGenerationResponse
 
 
-def _mono_samples(request: AudioGenerationRequest) -> list[float]:
+def _mono_samples(request: AudioGenerationRequest) -> np.ndarray:
     if request.mode == AudioMode.SINE:
         return generate_sine_samples(
             request.frequency_hz or 432.0,
@@ -75,61 +76,63 @@ def _mono_samples(request: AudioGenerationRequest) -> list[float]:
         )
 
     if request.mode == AudioMode.MIXED_AMBIENT:
-        tracks: list[tuple[list[float], float]] = []
+        def _ambient_layer_tracks():
+            for index, layer in enumerate(request.ambient_layers):
+                layer_seed = None if request.seed is None else request.seed + index
 
-        for index, layer in enumerate(request.ambient_layers):
-            layer_seed = None if request.seed is None else request.seed + index
-
-            if layer.kind == "noise":
-                if layer.noise_type == AudioMode.WHITE_NOISE:
-                    samples = generate_white_noise(
+                if layer.kind == "noise":
+                    if layer.noise_type == AudioMode.WHITE_NOISE:
+                        samples = generate_white_noise(
+                            request.duration_seconds,
+                            request.sample_rate,
+                            request.amplitude,
+                            layer_seed,
+                        )
+                    elif layer.noise_type == AudioMode.PINK_NOISE:
+                        samples = generate_pink_noise(
+                            request.duration_seconds,
+                            request.sample_rate,
+                            request.amplitude,
+                            layer_seed,
+                        )
+                    else:
+                        samples = generate_brown_noise(
+                            request.duration_seconds,
+                            request.sample_rate,
+                            request.amplitude,
+                            layer_seed,
+                        )
+                elif layer.kind == "tone":
+                    samples = generate_sine_samples(
+                        layer.frequency_hz,
                         request.duration_seconds,
                         request.sample_rate,
                         request.amplitude,
-                        layer_seed,
                     )
-                elif layer.noise_type == AudioMode.PINK_NOISE:
-                    samples = generate_pink_noise(
-                        request.duration_seconds,
-                        request.sample_rate,
-                        request.amplitude,
-                        layer_seed,
-                    )
+                elif layer.kind == "texture":
+                    if layer.texture_type == TextureMode.RAIN:
+                        samples = generate_rain_texture(
+                            request.duration_seconds,
+                            request.sample_rate,
+                            request.amplitude,
+                            layer_seed,
+                        )
+                    else:
+                        samples = generate_wind_texture(
+                            request.duration_seconds,
+                            request.sample_rate,
+                            request.amplitude,
+                            layer_seed,
+                        )
                 else:
-                    samples = generate_brown_noise(
-                        request.duration_seconds,
-                        request.sample_rate,
-                        request.amplitude,
-                        layer_seed,
-                    )
-            elif layer.kind == "tone":
-                samples = generate_sine_samples(
-                    layer.frequency_hz,
-                    request.duration_seconds,
-                    request.sample_rate,
-                    request.amplitude,
-                )
-            elif layer.kind == "texture":
-                if layer.texture_type == TextureMode.RAIN:
-                    samples = generate_rain_texture(
-                        request.duration_seconds,
-                        request.sample_rate,
-                        request.amplitude,
-                        layer_seed,
-                    )
-                else:
-                    samples = generate_wind_texture(
-                        request.duration_seconds,
-                        request.sample_rate,
-                        request.amplitude,
-                        layer_seed,
-                    )
-            else:
-                raise ValueError(f"Unsupported ambient layer kind: {layer.kind}")
+                    raise ValueError(f"Unsupported ambient layer kind: {layer.kind}")
 
-            tracks.append((samples, layer.gain))
+                yield samples, layer.gain
 
-        return mix_tracks(tracks)
+        # Layers are generated lazily and consumed one at a time by
+        # mix_tracks, so only one layer's array (plus the running mix) is
+        # ever resident, instead of holding every layer in memory at once.
+        return mix_tracks(_ambient_layer_tracks())
 
     if request.mode == AudioMode.PRESET:
         preset = get_preset(request.preset_name or "")
@@ -161,9 +164,9 @@ def _mono_samples(request: AudioGenerationRequest) -> list[float]:
 
 
 def _process_channel(
-    samples: list[float],
+    samples: np.ndarray,
     request: AudioGenerationRequest,
-) -> list[float]:
+) -> np.ndarray:
     samples = apply_fades(
         samples,
         request.sample_rate,
@@ -184,7 +187,7 @@ def _process_channel(
 def _write_wav(
     output_path: Path,
     sample_rate: int,
-    channels: list[list[float]],
+    channels: list[np.ndarray],
 ) -> None:
     frame_count = len(channels[0])
 
@@ -196,14 +199,10 @@ def _write_wav(
         wav_file.setsampwidth(2)
         wav_file.setframerate(sample_rate)
 
-        frames = bytearray()
+        interleaved = np.stack(channels, axis=1)
+        pcm = (np.clip(interleaved, -1.0, 1.0) * 32767).astype("<i2")
 
-        for frame_index in range(frame_count):
-            for channel in channels:
-                sample = max(-1.0, min(1.0, channel[frame_index]))
-                frames.extend(struct.pack("<h", int(sample * 32767)))
-
-        wav_file.writeframes(bytes(frames))
+        wav_file.writeframes(pcm.tobytes())
 
 
 def generate_audio(
@@ -275,7 +274,7 @@ def generate_audio(
         mono = _process_channel(_mono_samples(request), request)
 
         if request.channels == ChannelMode.STEREO:
-            channels = [mono[:], mono[:]]
+            channels = [mono.copy(), mono.copy()]
         else:
             channels = [mono]
 

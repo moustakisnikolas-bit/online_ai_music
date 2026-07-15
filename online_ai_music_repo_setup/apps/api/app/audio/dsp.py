@@ -1,51 +1,52 @@
-import math
-import random
 from collections.abc import Iterable
+
+import numpy as np
+from scipy.signal import lfilter
 
 
 def clamp(value: float, minimum: float = -1.0, maximum: float = 1.0) -> float:
     return max(minimum, min(maximum, value))
 
 
-def normalize(samples: Iterable[float], peak: float = 0.95) -> list[float]:
-    values = list(samples)
-    maximum = max((abs(value) for value in values), default=0.0)
+def normalize(samples: np.ndarray, peak: float = 0.95) -> np.ndarray:
+    if samples.size == 0:
+        return samples.astype(np.float32, copy=False)
+
+    maximum = float(np.max(np.abs(samples)))
 
     if maximum == 0:
-        return values
+        return samples.astype(np.float32, copy=False)
 
     scale = peak / maximum
-    return [clamp(value * scale) for value in values]
+    return np.clip(samples * scale, -1.0, 1.0).astype(np.float32, copy=False)
 
 
 def apply_fades(
-    samples: list[float],
+    samples: np.ndarray,
     sample_rate: int,
     fade_in_seconds: float,
     fade_out_seconds: float,
-) -> list[float]:
+) -> np.ndarray:
     total = len(samples)
     fade_in_frames = min(total, max(0, int(fade_in_seconds * sample_rate)))
     fade_out_frames = min(total, max(0, int(fade_out_seconds * sample_rate)))
-    result = samples[:]
+    result = samples.copy()
 
     if fade_in_frames > 0:
-        for index in range(fade_in_frames):
-            result[index] *= index / fade_in_frames
+        result[:fade_in_frames] *= np.arange(fade_in_frames) / fade_in_frames
 
     if fade_out_frames > 0:
-        start = total - fade_out_frames
-        for index in range(fade_out_frames):
-            result[start + index] *= 1.0 - (index / fade_out_frames)
+        ramp = 1.0 - (np.arange(fade_out_frames) / fade_out_frames)
+        result[total - fade_out_frames :] *= ramp
 
     return result
 
 
 def apply_loop_crossfade(
-    samples: list[float],
+    samples: np.ndarray,
     sample_rate: int,
     crossfade_seconds: float,
-) -> list[float]:
+) -> np.ndarray:
     if crossfade_seconds <= 0:
         return samples
 
@@ -57,18 +58,20 @@ def apply_loop_crossfade(
     if crossfade_frames <= 0:
         return samples
 
-    result = samples[:]
-
-    for index in range(crossfade_frames):
-        ratio = index / crossfade_frames
-        start_value = result[index]
-        end_index = len(result) - crossfade_frames + index
-        end_value = result[end_index]
-        blended = (start_value * ratio) + (end_value * (1.0 - ratio))
-        result[index] = blended
-        result[end_index] = blended
+    result = samples.copy()
+    ratio = np.arange(crossfade_frames) / crossfade_frames
+    start_values = result[:crossfade_frames]
+    end_values = result[len(result) - crossfade_frames :]
+    blended = (start_values * ratio) + (end_values * (1.0 - ratio))
+    result[:crossfade_frames] = blended
+    result[len(result) - crossfade_frames :] = blended
 
     return result
+
+
+def _time_axis(duration_seconds: int, sample_rate: int) -> np.ndarray:
+    frame_count = duration_seconds * sample_rate
+    return np.arange(frame_count, dtype=np.float32) / sample_rate
 
 
 def generate_sine_samples(
@@ -76,28 +79,21 @@ def generate_sine_samples(
     duration_seconds: int,
     sample_rate: int,
     amplitude: float,
-) -> list[float]:
-    frame_count = duration_seconds * sample_rate
-    angular = 2.0 * math.pi * frequency_hz
-
-    return [
-        amplitude * math.sin(angular * (index / sample_rate))
-        for index in range(frame_count)
-    ]
+) -> np.ndarray:
+    time_axis = _time_axis(duration_seconds, sample_rate)
+    return amplitude * np.sin(2.0 * np.pi * frequency_hz * time_axis)
 
 
 def generate_layered_tones(
     layers: list[tuple[float, float]],
     duration_seconds: int,
     sample_rate: int,
-) -> list[float]:
-    frame_count = duration_seconds * sample_rate
-    samples = [0.0] * frame_count
+) -> np.ndarray:
+    time_axis = _time_axis(duration_seconds, sample_rate)
+    samples = np.zeros_like(time_axis)
 
     for frequency_hz, amplitude in layers:
-        angular = 2.0 * math.pi * frequency_hz
-        for index in range(frame_count):
-            samples[index] += amplitude * math.sin(angular * (index / sample_rate))
+        samples += amplitude * np.sin(2.0 * np.pi * frequency_hz * time_axis)
 
     return normalize(samples)
 
@@ -108,7 +104,7 @@ def generate_binaural_channels(
     duration_seconds: int,
     sample_rate: int,
     amplitude: float,
-) -> tuple[list[float], list[float]]:
+) -> tuple[np.ndarray, np.ndarray]:
     return (
         generate_sine_samples(
             left_frequency_hz,
@@ -132,20 +128,12 @@ def generate_isochronic_samples(
     sample_rate: int,
     amplitude: float,
     modulation_depth: float,
-) -> list[float]:
-    frame_count = duration_seconds * sample_rate
-    samples: list[float] = []
-
-    for index in range(frame_count):
-        time_position = index / sample_rate
-        carrier = math.sin(2.0 * math.pi * carrier_frequency_hz * time_position)
-        modulation = 0.5 * (
-            1.0 + math.sin(2.0 * math.pi * pulse_frequency_hz * time_position)
-        )
-        gain = (1.0 - modulation_depth) + (modulation_depth * modulation)
-        samples.append(amplitude * gain * carrier)
-
-    return samples
+) -> np.ndarray:
+    time_axis = _time_axis(duration_seconds, sample_rate)
+    carrier = np.sin(2.0 * np.pi * carrier_frequency_hz * time_axis)
+    modulation = 0.5 * (1.0 + np.sin(2.0 * np.pi * pulse_frequency_hz * time_axis))
+    gain = (1.0 - modulation_depth) + (modulation_depth * modulation)
+    return amplitude * gain * carrier
 
 
 def generate_white_noise(
@@ -153,10 +141,12 @@ def generate_white_noise(
     sample_rate: int,
     amplitude: float,
     seed: int | None,
-) -> list[float]:
-    generator = random.Random(seed)
+) -> np.ndarray:
+    rng = np.random.default_rng(seed)
     frame_count = duration_seconds * sample_rate
-    return [generator.uniform(-amplitude, amplitude) for _ in range(frame_count)]
+    return rng.uniform(-amplitude, amplitude, size=frame_count).astype(
+        np.float32, copy=False
+    )
 
 
 def generate_brown_noise(
@@ -164,18 +154,17 @@ def generate_brown_noise(
     sample_rate: int,
     amplitude: float,
     seed: int | None,
-) -> list[float]:
-    generator = random.Random(seed)
+) -> np.ndarray:
+    # Brown/red noise is white noise integrated over time (a -6dB/octave
+    # low-pass slope). A leaky integrator (single-pole IIR) implements this
+    # in a numerically bounded, fully vectorizable way. The previous
+    # implementation used a per-sample clamped random walk, which for long
+    # durations spends most of its time pinned at the clamp boundary.
+    rng = np.random.default_rng(seed)
     frame_count = duration_seconds * sample_rate
-    value = 0.0
-    samples: list[float] = []
-
-    for _ in range(frame_count):
-        value += generator.uniform(-0.02, 0.02)
-        value = clamp(value)
-        samples.append(value)
-
-    return normalize(samples, peak=amplitude)
+    white = rng.uniform(-1.0, 1.0, size=frame_count).astype(np.float32, copy=False)
+    integrated = lfilter([0.02], [1.0, -0.999], white)
+    return normalize(integrated, peak=amplitude)
 
 
 def generate_pink_noise(
@@ -183,25 +172,34 @@ def generate_pink_noise(
     sample_rate: int,
     amplitude: float,
     seed: int | None,
-) -> list[float]:
-    generator = random.Random(seed)
+) -> np.ndarray:
+    rng = np.random.default_rng(seed)
     frame_count = duration_seconds * sample_rate
-    b0 = b1 = b2 = b3 = b4 = b5 = b6 = 0.0
-    samples: list[float] = []
+    white = rng.uniform(-1.0, 1.0, size=frame_count).astype(np.float32, copy=False)
 
-    for _ in range(frame_count):
-        white = generator.uniform(-1.0, 1.0)
-        b0 = 0.99886 * b0 + white * 0.0555179
-        b1 = 0.99332 * b1 + white * 0.0750759
-        b2 = 0.96900 * b2 + white * 0.1538520
-        b3 = 0.86650 * b3 + white * 0.3104856
-        b4 = 0.55000 * b4 + white * 0.5329522
-        b5 = -0.7616 * b5 - white * 0.0168980
-        pink = b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362
-        b6 = white * 0.115926
-        samples.append(pink)
+    # Paul Kellet's refined pink noise filter: a cascade of one-pole
+    # sections plus a one-sample-delayed term and a direct white term.
+    sections = (
+        (0.99886, 0.0555179),
+        (0.99332, 0.0750759),
+        (0.96900, 0.1538520),
+        (0.86650, 0.3104856),
+        (0.55000, 0.5329522),
+        (-0.7616, -0.0168980),
+    )
 
-    return normalize(samples, peak=amplitude)
+    pink = np.zeros_like(white)
+
+    for pole, gain in sections:
+        pink += lfilter([gain], [1.0, -pole], white)
+
+    delayed_white = np.concatenate(([0.0], white[:-1])).astype(
+        np.float32, copy=False
+    )
+    pink += delayed_white * 0.115926
+    pink += white * 0.5362
+
+    return normalize(pink, peak=amplitude)
 
 
 def generate_rain_texture(
@@ -209,20 +207,19 @@ def generate_rain_texture(
     sample_rate: int,
     amplitude: float,
     seed: int | None,
-) -> list[float]:
-    generator = random.Random(seed)
+) -> np.ndarray:
+    rng = np.random.default_rng(seed)
     frame_count = duration_seconds * sample_rate
-    samples = [0.0] * frame_count
 
-    for index in range(frame_count):
-        base = generator.uniform(-1.0, 1.0) * 0.35
-        drop = 0.0
+    base = rng.uniform(-1.0, 1.0, size=frame_count).astype(np.float32, copy=False)
+    base *= 0.35
+    drop_hits = rng.random(frame_count) < 0.004
+    drop_values = rng.uniform(0.4, 1.0, size=frame_count).astype(
+        np.float32, copy=False
+    )
+    drops = np.where(drop_hits, drop_values, np.float32(0.0))
 
-        if generator.random() < 0.004:
-            drop = generator.uniform(0.4, 1.0)
-
-        samples[index] = (base + drop) * amplitude
-
+    samples = (base + drops) * amplitude
     return normalize(samples, peak=min(amplitude, 0.95))
 
 
@@ -231,39 +228,40 @@ def generate_wind_texture(
     sample_rate: int,
     amplitude: float,
     seed: int | None,
-) -> list[float]:
-    generator = random.Random(seed)
+) -> np.ndarray:
+    rng = np.random.default_rng(seed)
     frame_count = duration_seconds * sample_rate
-    samples: list[float] = []
-    smooth = 0.0
+    time_axis = _time_axis(duration_seconds, sample_rate)
 
-    for index in range(frame_count):
-        white = generator.uniform(-1.0, 1.0)
-        smooth = 0.995 * smooth + 0.005 * white
-        swell = 0.55 + 0.45 * math.sin(
-            2.0 * math.pi * 0.08 * (index / sample_rate)
-        )
-        samples.append(smooth * swell * amplitude)
+    white = rng.uniform(-1.0, 1.0, size=frame_count).astype(np.float32, copy=False)
+    smooth = lfilter([0.005], [1.0, -0.995], white)
+    swell = 0.55 + 0.45 * np.sin(2.0 * np.pi * 0.08 * time_axis)
 
+    samples = smooth * swell * amplitude
     return normalize(samples, peak=min(amplitude, 0.95))
 
 
 def mix_tracks(
-    tracks: list[tuple[list[float], float]],
+    tracks: Iterable[tuple[np.ndarray, float]],
     peak: float = 0.95,
-) -> list[float]:
-    if not tracks:
-        return []
-
-    frame_count = len(tracks[0][0])
-
-    if any(len(samples) != frame_count for samples, _ in tracks):
-        raise ValueError("All mixed tracks must have equal frame counts")
-
-    mixed = [0.0] * frame_count
+) -> np.ndarray:
+    # Consumes tracks one at a time and accumulates in place, rather than
+    # requiring every layer's full-length array to be materialized and held
+    # in memory simultaneously. For long, many-layer ambient mixes this is
+    # the difference between O(1) and O(layer count) peak memory.
+    mixed: np.ndarray | None = None
+    frame_count: int | None = None
 
     for samples, gain in tracks:
-        for index, sample in enumerate(samples):
-            mixed[index] += sample * gain
+        if frame_count is None:
+            frame_count = len(samples)
+            mixed = (samples * gain).astype(np.float32, copy=False)
+        elif len(samples) != frame_count:
+            raise ValueError("All mixed tracks must have equal frame counts")
+        else:
+            mixed += (samples * gain).astype(np.float32, copy=False)
+
+    if mixed is None:
+        return np.array([], dtype=np.float32)
 
     return normalize(mixed, peak=peak)
