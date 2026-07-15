@@ -1,7 +1,9 @@
+import wave
 from collections.abc import Iterable
+from pathlib import Path
 
 import numpy as np
-from scipy.signal import lfilter
+from scipy.signal import lfilter, resample
 
 
 def clamp(value: float, minimum: float = -1.0, maximum: float = 1.0) -> float:
@@ -239,6 +241,37 @@ def generate_wind_texture(
 
     samples = smooth * swell * amplitude
     return normalize(samples, peak=min(amplitude, 0.95))
+
+
+def load_sample_layer(
+    sample_path: Path,
+    duration_seconds: int,
+    sample_rate: int,
+) -> np.ndarray:
+    # Loads a WAV file, downmixes to mono, resamples to the target sample
+    # rate if needed, and loops (simple repeat-and-trim, not a crossfaded
+    # seam) to fill the requested duration.
+    with wave.open(str(sample_path), "rb") as wav_file:
+        source_rate = wav_file.getframerate()
+        channel_count = wav_file.getnchannels()
+        frame_count = wav_file.getnframes()
+        raw = wav_file.readframes(frame_count)
+
+    pcm = np.frombuffer(raw, dtype="<i2").astype(np.float32) / 32767.0
+
+    if pcm.size == 0:
+        raise ValueError(f"Sample audio file has no frames: {sample_path}")
+
+    if channel_count > 1:
+        pcm = pcm.reshape(-1, channel_count).mean(axis=1)
+
+    if source_rate != sample_rate:
+        target_length = max(1, int(round(len(pcm) * sample_rate / source_rate)))
+        pcm = resample(pcm, target_length).astype(np.float32)
+
+    target_frames = duration_seconds * sample_rate
+    tiles = int(np.ceil(target_frames / len(pcm)))
+    return np.tile(pcm, tiles)[:target_frames]
 
 
 def mix_tracks(

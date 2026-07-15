@@ -12,6 +12,7 @@ from app.audio.dsp import (
     generate_isochronic_samples,
     generate_rain_texture,
     generate_wind_texture,
+    load_sample_layer,
     mix_tracks,
     generate_layered_tones,
     generate_pink_noise,
@@ -19,6 +20,7 @@ from app.audio.dsp import (
     generate_white_noise,
 )
 from app.audio.presets import get_preset
+from app.audio.sample_library import get_sample, resolve_sample_audio_path
 from app.audio.types import AudioMode, ChannelMode, TextureMode
 from app.services.audio_encoding import encode_audio
 from app.services.long_form_audio import render_long_form_wav
@@ -124,6 +126,14 @@ def _mono_samples(request: AudioGenerationRequest) -> np.ndarray:
                             request.amplitude,
                             layer_seed,
                         )
+                elif layer.kind == "sample":
+                    sample = get_sample(layer.sample_id)
+                    sample_path = resolve_sample_audio_path(sample)
+                    samples = load_sample_layer(
+                        sample_path,
+                        request.duration_seconds,
+                        request.sample_rate,
+                    )
                 else:
                     raise ValueError(f"Unsupported ambient layer kind: {layer.kind}")
 

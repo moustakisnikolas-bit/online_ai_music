@@ -1,0 +1,49 @@
+{
+  "samples": [
+    {
+      "id": "ocean-waves-01",
+      "label": "Ocean Waves",
+      "category": "ocean",
+      "filename": "ocean-waves-01.wav",
+      "license": "CC0",
+      "source_url": null,
+      "attribution": null
+    },
+    {
+      "id": "forest-birds-01",
+      "label": "Forest Birds",
+      "category": "forest",
+      "filename": "forest-birds-01.wav",
+      "license": "CC0",
+      "source_url": null,
+      "attribution": null
+    },
+    {
+      "id": "campfire-01",
+      "label": "Campfire",
+      "category": "fire",
+      "filename": "campfire-01.wav",
+      "license": "CC0",
+      "source_url": null,
+      "attribution": null
+    },
+    {
+      "id": "thunderstorm-01",
+      "label": "Thunderstorm",
+      "category": "thunder",
+      "filename": "thunderstorm-01.wav",
+      "license": "CC0",
+      "source_url": null,
+      "attribution": null
+    },
+    {
+      "id": "night-crickets-01",
+      "label": "Night Crickets",
+      "category": "night",
+      "filename": "night-crickets-01.wav",
+      "license": "CC0",
+      "source_url": null,
+      "attribution": null
+    }
+  ]
+}

@@ -49,8 +49,14 @@ class AmbientTextureLayer(BaseModel):
         return value
 
 
+class AmbientSampleLayer(BaseModel):
+    kind: Literal["sample"] = "sample"
+    sample_id: str = Field(min_length=1, max_length=100)
+    gain: float = Field(gt=0, le=1.0)
+
+
 AmbientLayerRequest = Annotated[
-    AmbientNoiseLayer | AmbientToneLayer | AmbientTextureLayer,
+    AmbientNoiseLayer | AmbientToneLayer | AmbientTextureLayer | AmbientSampleLayer,
     Field(discriminator="kind"),
 ]
 

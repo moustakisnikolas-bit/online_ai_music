@@ -9,6 +9,7 @@ from app.api.routes.projects import router as projects_router
 from app.api.routes.review import router as review_router
 from app.api.routes.catalog import router as catalog_router
 from app.api.routes.presets import router as presets_router
+from app.api.routes.samples import router as samples_router
 from app.api.routes.web import router as web_router
 from app.api.routes.visuals import router as visuals_router
 from app.api.routes.visual_files import router as visual_files_router
@@ -33,6 +34,7 @@ app.include_router(projects_router, prefix="/api/v1")
 app.include_router(review_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1")
 app.include_router(presets_router, prefix="/api/v1")
+app.include_router(samples_router, prefix="/api/v1")
 
 app.include_router(visuals_router, prefix="/api/v1")
 app.include_router(visual_files_router, prefix="/api/v1")

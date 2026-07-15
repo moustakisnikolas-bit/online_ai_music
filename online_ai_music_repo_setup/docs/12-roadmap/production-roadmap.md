@@ -63,6 +63,37 @@ approximations.
 Definition of done: at least five natural sound types are available as
 mixable layers, each with a recorded, verifiable commercial license.
 
+Status: engine done, content not sourced yet (by design -- see below).
+Added a `sample` ambient layer kind alongside noise/tone/texture: loads a
+WAV file, downmixes to mono, resamples if needed, and loops it to fill
+the requested duration, mixable with any other layer type. A manifest at
+`apps/api/data/sample_library/manifest.json` tracks each sample's id,
+category, filename, and license/source, with a
+`GET /audio/samples` endpoint reporting which entries actually have their
+audio file present (`available: true/false`).
+
+Chose CC0/public-domain sourcing after reading actual license terms (not
+marketing copy) from Soundsnap, Sonniss, Pro Sound Effects, A Sound
+Effect, and Epic Stock Media: all of them explicitly prohibit using their
+content as the primary element of a sold/streamed product -- language
+like "primarily a sound product... soundscape albums" is a directly
+targeted restriction, not fine print. CC0 is the only sourcing path
+that's safe by construction, since there's no license to violate.
+
+This can't be automated from here: sourcing real CC0 recordings means
+browsing a catalog (e.g. Freesound filtered to CC0) and verifying the
+license per file, which needs either human judgment or API credentials
+neither of which exist in this environment. The five manifest entries
+committed are placeholders demonstrating the format (ocean, forest birds,
+campfire, thunderstorm, night crickets) -- all `available: false` until
+real files are added. Full curation workflow in
+docs/06-factories/natural-sound-sample-library.md.
+
+Known limitation: looping is simple repeat-and-trim, not a crossfaded
+seam, so a source recording that doesn't already loop cleanly will have
+an audible seam. Worth revisiting once real samples are in place and the
+seam is actually audible to judge against.
+
 ## Milestone 3: Engine Performance (numpy rewrite)
 
 Goal: generation speed that can sustain a real publishing cadence.
@@ -151,6 +182,38 @@ path in is through a distributor.
 Definition of done: an approved catalog entry can be submitted to the
 chosen distributor via API, with resulting per-platform status tracked
 back into the catalog.
+
+Status: decided, not built. Researched actual license/API terms (not just
+marketing pages) across DistroKid, TuneCore, CD Baby, FUGA, Revelator,
+SoundOn, RouteNote, LabelGrid, and ToneGrid. Findings:
+
+- DistroKid and CD Baby have no public API; TuneCore only offers an
+  enterprise partner API. FUGA and Revelator have real APIs but require
+  enterprise sales, and both were acquired by major labels in early 2026
+  (FUGA by UMG/Virgin, Revelator by Warner) -- a worse fit for a small
+  independent operation, not a better one.
+- Neither Spotify nor Apple Music accept direct artist uploads under any
+  circumstances; both require an approved distributor. This is a platform
+  trust/business relationship, not a technical API gap -- no open-source
+  tool can substitute for it.
+- LabelGrid is the one option with genuine self-service API access: public
+  docs, a sandbox, no sales calls. $119/mo+ for API/automation tiers.
+- RouteNote is free (0 upfront, 85/15 royalty split) and reaches Spotify/
+  Apple Music/Amazon Music, but has no API at all -- manual dashboard only.
+- ToneGrid looks like a cheaper API-first alternative to LabelGrid but
+  entered public beta in April 2026 with no disclosed pricing yet --
+  unproven, worth revisiting later, not a decision-ready option now.
+
+Chosen: publish manually through RouteNote for now rather than pay for
+LabelGrid automation. This means the auto-upload goal for Spotify/Apple/
+Amazon is deliberately deferred -- YouTube (Milestone 4) remains the only
+automated publishing path until this is revisited.
+
+Revisit trigger (explicit, not vague): build the LabelGrid automation once
+monthly income from this project exceeds 2x LabelGrid's monthly API cost
+($119/mo Starter tier as of this writing) -- i.e. roughly $238/mo. Below
+that, the cost of automating isn't justified by the manual workload it
+would save.
 
 ## Milestone 6: Catalog & Release Pipeline UX
 

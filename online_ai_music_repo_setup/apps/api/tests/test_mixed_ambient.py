@@ -1,10 +1,13 @@
+import struct
 import wave
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
+from app.audio.sample_library import NaturalSoundSample
 from app.audio.types import AudioMode, ChannelMode
+from app.services import audio_generator
 from app.schemas.audio import AudioGenerationRequest
 from app.services.audio_generator import generate_audio
 
@@ -59,6 +62,59 @@ def test_generate_mixed_ambient_scene_with_many_layers(tmp_path: Path) -> None:
     )
 
     result = generate_audio(request, tmp_path)
+
+    with wave.open(result.file_path, "rb") as wav_file:
+        assert wav_file.getnchannels() == 1
+        assert wav_file.getnframes() == 8000
+
+
+def test_generate_mixed_ambient_scene_with_sample_layer(tmp_path: Path, monkeypatch) -> None:
+    sample_audio_path = tmp_path / "rain-01.wav"
+
+    with wave.open(str(sample_audio_path), "w") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(8000)
+        frames = bytearray()
+
+        for index in range(2000):
+            value = int(8000 * ((index % 40) / 40 - 0.5))
+            frames.extend(struct.pack("<h", value))
+
+        wav_file.writeframes(bytes(frames))
+
+    sample = NaturalSoundSample(
+        id="rain-01",
+        label="Rain",
+        category="rain",
+        filename="rain-01.wav",
+        license="CC0",
+    )
+
+    monkeypatch.setattr(audio_generator, "get_sample", lambda sample_id: sample)
+    monkeypatch.setattr(
+        audio_generator,
+        "resolve_sample_audio_path",
+        lambda _sample: sample_audio_path,
+    )
+
+    request = AudioGenerationRequest(
+        title="Sampled Rain",
+        mode=AudioMode.MIXED_AMBIENT,
+        channels=ChannelMode.MONO,
+        ambient_layers=[
+            {"kind": "sample", "sample_id": "rain-01", "gain": 0.8},
+            {"kind": "noise", "noise_type": "brown_noise", "gain": 0.3},
+        ],
+        duration_seconds=1,
+        sample_rate=8000,
+        amplitude=0.1,
+        fade_in_seconds=0,
+        fade_out_seconds=0,
+        seed=1,
+    )
+
+    result = generate_audio(request, tmp_path / "output")
 
     with wave.open(result.file_path, "rb") as wav_file:
         assert wav_file.getnchannels() == 1
