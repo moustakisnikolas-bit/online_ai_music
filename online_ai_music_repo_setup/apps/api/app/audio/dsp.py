@@ -243,6 +243,77 @@ def generate_wind_texture(
     return normalize(samples, peak=min(amplitude, 0.95))
 
 
+def generate_waves_texture(
+    duration_seconds: int,
+    sample_rate: int,
+    amplitude: float,
+    seed: int | None,
+) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    frame_count = duration_seconds * sample_rate
+    time_axis = _time_axis(duration_seconds, sample_rate)
+
+    white = rng.uniform(-1.0, 1.0, size=frame_count).astype(np.float32, copy=False)
+    # Heavier low-pass than wind_texture for a duller, rumbling wash rather
+    # than a whooshing gust.
+    wash = lfilter([0.01], [1.0, -0.995], white)
+
+    # Two slow sines at incommensurate frequencies rather than one periodic
+    # LFO, so wave sets swell in and out without sounding metronomic.
+    swell = (
+        0.5
+        + 0.3 * np.sin(2.0 * np.pi * 0.045 * time_axis)
+        + 0.2 * np.sin(2.0 * np.pi * 0.071 * time_axis + 1.3)
+    )
+    swell = np.clip(swell, 0.15, 1.0)
+
+    samples = wash * swell * amplitude
+    return normalize(samples, peak=min(amplitude, 0.95))
+
+
+def generate_birds_texture(
+    duration_seconds: int,
+    sample_rate: int,
+    amplitude: float,
+    seed: int | None,
+) -> np.ndarray:
+    # Sparse, randomly-timed frequency-swept tone bursts approximating bird
+    # calls. This is a rough synthesized approximation -- convincing
+    # birdsong needs a real recording or an AI-generated clip (see
+    # audio/sample_library.py and services/instrumental_generator.py),
+    # not more DSP tone math.
+    rng = np.random.default_rng(seed)
+    frame_count = duration_seconds * sample_rate
+    samples = np.zeros(frame_count, dtype=np.float32)
+
+    position = 0
+    while position < frame_count:
+        position += int(rng.uniform(0.8, 3.5) * sample_rate)
+
+        if position >= frame_count:
+            break
+
+        chirp_frames = max(1, int(rng.uniform(0.08, 0.22) * sample_rate))
+        end = min(frame_count, position + chirp_frames)
+        length = end - position
+
+        if length <= 1:
+            position = end
+            continue
+
+        start_freq = rng.uniform(2200, 4500)
+        end_freq = start_freq + rng.uniform(-1200, 1800)
+        instantaneous_freq = np.linspace(start_freq, end_freq, length)
+        phase = 2.0 * np.pi * np.cumsum(instantaneous_freq) / sample_rate
+        envelope = np.sin(np.pi * np.arange(length) / (length - 1)) ** 2
+        chirp = (np.sin(phase) * envelope).astype(np.float32)
+
+        samples[position:end] += chirp
+        position = end
+
+    return normalize(samples, peak=min(amplitude, 0.9))
+
+
 def load_sample_layer(
     sample_path: Path,
     duration_seconds: int,

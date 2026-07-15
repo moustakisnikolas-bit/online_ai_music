@@ -28,3 +28,5 @@ class TextureMode(StrEnum):
     NONE = "none"
     RAIN = "rain"
     WIND = "wind"
+    WAVES = "waves"
+    BIRDS = "birds"

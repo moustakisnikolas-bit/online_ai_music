@@ -68,6 +68,32 @@ def test_generate_mixed_ambient_scene_with_many_layers(tmp_path: Path) -> None:
         assert wav_file.getnframes() == 8000
 
 
+def test_generate_mixed_ambient_scene_with_waves_and_birds(tmp_path: Path) -> None:
+    request = AudioGenerationRequest(
+        title="Coastal Morning",
+        mode=AudioMode.MIXED_AMBIENT,
+        channels=ChannelMode.STEREO,
+        ambient_layers=[
+            {"kind": "texture", "texture_type": "waves", "gain": 0.6},
+            {"kind": "texture", "texture_type": "birds", "gain": 0.3},
+        ],
+        duration_seconds=2,
+        sample_rate=8000,
+        amplitude=0.1,
+        fade_in_seconds=0,
+        fade_out_seconds=0,
+        seed=3,
+    )
+
+    result = generate_audio(request, tmp_path)
+
+    assert result.mode == "mixed_ambient"
+
+    with wave.open(result.file_path, "rb") as wav_file:
+        assert wav_file.getnchannels() == 2
+        assert wav_file.getnframes() == 16000
+
+
 def test_generate_mixed_ambient_scene_with_sample_layer(tmp_path: Path, monkeypatch) -> None:
     sample_audio_path = tmp_path / "rain-01.wav"
 

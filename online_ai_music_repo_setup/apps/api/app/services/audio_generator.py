@@ -8,9 +8,11 @@ from app.audio.dsp import (
     apply_fades,
     apply_loop_crossfade,
     generate_binaural_channels,
+    generate_birds_texture,
     generate_brown_noise,
     generate_isochronic_samples,
     generate_rain_texture,
+    generate_waves_texture,
     generate_wind_texture,
     load_sample_layer,
     mix_tracks,
@@ -119,8 +121,22 @@ def _mono_samples(request: AudioGenerationRequest) -> np.ndarray:
                             request.amplitude,
                             layer_seed,
                         )
-                    else:
+                    elif layer.texture_type == TextureMode.WIND:
                         samples = generate_wind_texture(
+                            request.duration_seconds,
+                            request.sample_rate,
+                            request.amplitude,
+                            layer_seed,
+                        )
+                    elif layer.texture_type == TextureMode.WAVES:
+                        samples = generate_waves_texture(
+                            request.duration_seconds,
+                            request.sample_rate,
+                            request.amplitude,
+                            layer_seed,
+                        )
+                    else:
+                        samples = generate_birds_texture(
                             request.duration_seconds,
                             request.sample_rate,
                             request.amplitude,
