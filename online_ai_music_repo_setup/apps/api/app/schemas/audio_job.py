@@ -1,7 +1,8 @@
 import uuid
 from datetime import datetime
+from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from app.audio.types import AudioMode, ChannelMode
 from app.schemas.audio import ToneLayerRequest
@@ -73,3 +74,8 @@ class AudioJobResponse(BaseModel):
     created_at: datetime
     started_at: datetime | None
     completed_at: datetime | None
+
+    @computed_field
+    @property
+    def filename(self) -> str | None:
+        return Path(self.output_file_path).name if self.output_file_path else None

@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
 from app.audio.types import AudioMode, ChannelMode, OutputFormat, TextureMode
 
@@ -131,6 +131,7 @@ class AudioGenerationResponse(BaseModel):
     output_format: str
     file_path: str
 
+    @computed_field
     @property
     def filename(self) -> str:
         return Path(self.file_path).name

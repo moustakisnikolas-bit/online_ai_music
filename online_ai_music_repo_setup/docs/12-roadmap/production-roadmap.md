@@ -167,6 +167,39 @@ management experience.
 Definition of done: a user can see every track's status across every
 connected platform from one screen.
 
+Status: partially done. While scoping this, found that the web UI's
+"Generate audio" flow called the stateless `/audio/generate` endpoint,
+which never wrote a database row -- meaning nothing generated through the
+actual UI was reviewable or publishable, independent of anything else in
+this roadmap. Fixed by adding `POST /audio/generate-and-catalog` (same
+synchronous generation, reusing the existing service, plus a persisted
+`AudioJob` row) and pointing the UI at it instead. Added a Library section
+to `index.html`: lists tracks with status/review badges, an inline audio
+player, and Approve/Reject buttons wired to the existing review endpoints.
+
+This was verified against a real Postgres for the first time (previously
+impossible in this environment -- see the Milestone 4 status note), via a
+throwaway local container, not just unit tests: generated a multi-layer
+`mixed_ambient` track through `/generate-and-catalog`, confirmed it
+appeared in `GET /audio/jobs`, and confirmed approving it flips
+`review_status`. Also caught and fixed a real bug along the way: `filename`
+on both `AudioGenerationResponse` and `AudioJobResponse` was a plain
+`@property`, which Pydantic v2 does not include in JSON output without
+`@computed_field` -- it was silently serializing as absent. The frontend
+had never hit this because it happened to derive the filename manually
+instead of using the field.
+
+Not done: no per-track "publish to YouTube" action in the library yet. The
+library only has one platform's worth of connection (YouTube) implemented
+and no per-job video file association, so wiring a publish button in
+means deciding how a track's audio, video, and artwork tie together as one
+release -- that's a real design question (see Milestone 5/7), not a small
+addition, so it's left open rather than half-wired.
+Mixed_ambient jobs created via `/generate-and-catalog` don't persist their
+ambient_layers configuration (no column for it yet -- see the repository
+docstring); the catalog only needs the output file and descriptive fields
+to display and review, not the exact layer recipe.
+
 ## Milestone 7: Visual Polish
 
 Goal: a UI that reads like a real product, not an internal test form.

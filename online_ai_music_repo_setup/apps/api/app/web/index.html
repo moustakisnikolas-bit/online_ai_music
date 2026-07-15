@@ -195,6 +195,65 @@
       white-space: pre-wrap;
       word-break: break-word;
     }
+
+    .library-row {
+      border: 1px solid #30363d;
+      border-radius: 12px;
+      padding: 16px;
+      background: #11161d;
+      margin-bottom: 12px;
+    }
+
+    .library-row-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: space-between;
+    }
+
+    .library-row-title {
+      font-weight: 700;
+    }
+
+    .library-row-meta {
+      color: #9da7b3;
+      font-size: .85rem;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 999px;
+      font-size: .78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+
+    .badge-pending { background: #3d2f00; color: #e3b341; }
+    .badge-approved { background: #0d3320; color: #7ee787; }
+    .badge-rejected { background: #3d0d12; color: #ff7b72; }
+    .badge-completed { background: #0d2b47; color: #79c0ff; }
+    .badge-queued, .badge-processing { background: #21262d; color: #c9d1d9; }
+    .badge-failed, .badge-queue_failed { background: #3d0d12; color: #ff7b72; }
+
+    .library-row-actions {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .library-row-actions button {
+      padding: 7px 12px;
+      font-size: .85rem;
+    }
+
+    .library-empty {
+      color: #9da7b3;
+      font-size: .9rem;
+    }
   </style>
 </head>
 <body>
@@ -422,6 +481,21 @@
       <a id="export-download" class="download hidden" href="#">Download export ZIP</a>
     </div>
   </section>
+
+  <section class="panel">
+    <h2>4. Library</h2>
+    <p class="subtitle">
+      Tracks generated through this page, with review status and playback.
+      Approval here is what allows a track to be published.
+    </p>
+
+    <div class="actions">
+      <button id="refresh-library" class="secondary">Refresh library</button>
+      <span id="library-status" class="status"></span>
+    </div>
+
+    <div id="library-list"></div>
+  </section>
 </main>
 
 <script>
@@ -579,15 +653,18 @@
     step("audio", "Generating…");
     const payload = buildAudioPayload();
 
+    // Uses the catalog-tracked endpoint (not the stateless /audio/generate)
+    // so every track made through this page is persisted as a reviewable,
+    // publishable job instead of only existing as a file on disk.
     state.audio = await jsonRequest(
-      "/api/v1/audio/generate",
+      "/api/v1/audio/generate-and-catalog",
       {
         method: "POST",
         body: JSON.stringify(payload)
       }
     );
 
-    const filename = state.audio.file_path.split("/").pop();
+    const filename = state.audio.filename;
     const downloadUrl = `/api/v1/audio/files/${encodeURIComponent(filename)}`;
 
     document.getElementById("audio-player").src = downloadUrl;
@@ -597,6 +674,7 @@
       JSON.stringify(state.audio, null, 2);
 
     step("audio", "Completed", "complete");
+    loadLibrary();
     return filename;
   }
 
@@ -763,9 +841,102 @@
     () => runWorkflow(false)
   );
 
+  function formatDuration(totalSeconds) {
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  }
+
+  function escapeHtml(value) {
+    const div = document.createElement("div");
+    div.textContent = String(value);
+    return div.innerHTML;
+  }
+
+  function renderLibraryRow(job) {
+    const row = document.createElement("div");
+    row.className = "library-row";
+
+    const statusBadge = `<span class="badge badge-${escapeHtml(job.status)}">${escapeHtml(job.status)}</span>`;
+    const reviewBadge = `<span class="badge badge-${escapeHtml(job.review_status)}">${escapeHtml(job.review_status)}</span>`;
+
+    const player = job.filename
+      ? `<audio controls src="/api/v1/audio/files/${encodeURIComponent(job.filename)}"></audio>`
+      : "";
+
+    const canReview = job.status === "completed" && job.review_status === "pending";
+    const actions = canReview
+      ? `
+        <div class="library-row-actions">
+          <button type="button" class="approve-btn" data-job-id="${escapeHtml(job.id)}">Approve</button>
+          <button type="button" class="warning reject-btn" data-job-id="${escapeHtml(job.id)}">Reject</button>
+        </div>
+      `
+      : "";
+
+    row.innerHTML = `
+      <div class="library-row-header">
+        <span class="library-row-title">${escapeHtml(job.title)}</span>
+        <span>${statusBadge} ${reviewBadge}</span>
+      </div>
+      <div class="library-row-meta">
+        ${escapeHtml(job.mode)} · ${formatDuration(job.duration_seconds)} · ${escapeHtml(job.channels)}
+      </div>
+      ${player}
+      ${actions}
+    `;
+
+    return row;
+  }
+
+  async function reviewJob(jobId, decision) {
+    await jsonRequest(
+      `/api/v1/audio/jobs/${jobId}/${decision}`,
+      {
+        method: "POST",
+        body: JSON.stringify({})
+      }
+    );
+    await loadLibrary();
+  }
+
+  async function loadLibrary() {
+    const libraryStatus = document.getElementById("library-status");
+    const list = document.getElementById("library-list");
+    libraryStatus.textContent = "Loading…";
+
+    try {
+      const jobs = await jsonRequest("/api/v1/audio/jobs?limit=50");
+      list.innerHTML = "";
+
+      if (jobs.length === 0) {
+        list.innerHTML = '<p class="library-empty">No tracks generated yet.</p>';
+      } else {
+        for (const job of jobs) {
+          list.appendChild(renderLibraryRow(job));
+        }
+
+        list.querySelectorAll(".approve-btn").forEach((button) => {
+          button.addEventListener("click", () => reviewJob(button.dataset.jobId, "approve"));
+        });
+
+        list.querySelectorAll(".reject-btn").forEach((button) => {
+          button.addEventListener("click", () => reviewJob(button.dataset.jobId, "reject"));
+        });
+      }
+
+      libraryStatus.textContent = "";
+    } catch (error) {
+      libraryStatus.textContent = "Failed to load library.";
+    }
+  }
+
+  document.getElementById("refresh-library").addEventListener("click", loadLibrary);
+
   modeElement.addEventListener("change", updateConditionalFields);
   updateConditionalFields();
   loadPresets();
+  loadLibrary();
 </script>
 </body>
 </html>
