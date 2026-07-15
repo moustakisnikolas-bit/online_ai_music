@@ -22,7 +22,7 @@ def generate_audio_endpoint(
             request=request,
             output_dir=settings.audio_output_path,
         )
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RuntimeError) as exc:
         raise HTTPException(
             status_code=400,
             detail=f"Audio generation failed: {exc}",
@@ -44,7 +44,7 @@ def generate_and_catalog_audio_endpoint(
             request=request,
             output_dir=settings.audio_output_path,
         )
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, RuntimeError) as exc:
         raise HTTPException(
             status_code=400,
             detail=f"Audio generation failed: {exc}",
