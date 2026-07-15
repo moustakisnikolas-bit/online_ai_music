@@ -83,6 +83,36 @@
       color: #e6edf3;
     }
 
+    input[type="checkbox"] {
+      width: auto;
+      padding: 0;
+      border: none;
+      background: none;
+      accent-color: #238636;
+    }
+
+    .texture-group-title {
+      display: block;
+      font-size: .9rem;
+      color: #c9d1d9;
+      margin-bottom: 7px;
+    }
+
+    .texture-checkboxes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .85rem;
+      color: #c9d1d9;
+      cursor: pointer;
+    }
+
     textarea {
       min-height: 110px;
       resize: vertical;
@@ -462,16 +492,19 @@
         </select>
       </label>
 
-      <label id="texture-group">
-        Texture
-        <select id="texture-mode">
-          <option value="rain" selected>Rain</option>
-          <option value="wind">Wind</option>
-          <option value="waves">Waves</option>
-          <option value="birds">Birds (rough synthesis)</option>
-          <option value="none">None</option>
-        </select>
-      </label>
+      <div id="texture-group">
+        <span class="texture-group-title">Textures (select any combination)</span>
+        <div class="texture-checkboxes">
+          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="rain" checked> Rain</label>
+          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="wind"> Wind</label>
+          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="waves"> Waves</label>
+          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="birds"> Birds (rough synthesis)</label>
+          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="fire"> Fire crackle</label>
+          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="water"> Flowing water</label>
+          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="thunder"> Thunder</label>
+          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="chimes"> Wind chimes</label>
+        </div>
+      </div>
 
       <label>
         Fade in
@@ -806,7 +839,9 @@
     }
 
     if (mode === "mixed_ambient") {
-      const textureValue = document.getElementById("texture-mode").value;
+      const textureValues = Array.from(
+        document.querySelectorAll(".texture-checkbox:checked")
+      ).map((checkbox) => checkbox.value);
 
       payload.ambient_layers = [
         {
@@ -821,7 +856,7 @@
         }
       ];
 
-      if (textureValue !== "none") {
+      for (const textureValue of textureValues) {
         payload.ambient_layers.push({
           kind: "texture",
           texture_type: textureValue,
@@ -941,9 +976,10 @@
           context: document.getElementById("context").value,
           language: "en",
           frequency_hz: payload.frequency_hz || null,
-          texture_mode: payload.mode === "mixed_ambient"
-            ? document.getElementById("texture-mode").value
-            : null
+          texture_mode: (payload.ambient_layers || [])
+            .filter((layer) => layer.kind === "texture")
+            .map((layer) => layer.texture_type)
+            .join(", ") || null
         })
       }
     );

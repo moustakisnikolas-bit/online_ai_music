@@ -314,6 +314,119 @@ def generate_birds_texture(
     return normalize(samples, peak=min(amplitude, 0.9))
 
 
+def generate_fire_texture(
+    duration_seconds: int,
+    sample_rate: int,
+    amplitude: float,
+    seed: int | None,
+) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    frame_count = duration_seconds * sample_rate
+
+    white = rng.uniform(-1.0, 1.0, size=frame_count).astype(np.float32, copy=False)
+    bed = lfilter([0.03], [1.0, -0.98], white).astype(np.float32) * 0.4
+
+    # Sparse pop impulses shaped by a short exponential-decay filter --
+    # an IIR filter's impulse response is naturally an exponential decay,
+    # so this turns each random trigger into a short "pop" tail in one
+    # vectorized pass instead of a per-event loop.
+    pop_hits = rng.random(frame_count) < 0.0012
+    pop_noise = rng.uniform(-1.0, 1.0, size=frame_count).astype(np.float32, copy=False)
+    triggers = np.where(pop_hits, pop_noise, np.float32(0.0))
+    crackle = lfilter([1.0], [1.0, -0.85], triggers).astype(np.float32)
+
+    samples = (bed + crackle * 0.6) * amplitude
+    return normalize(samples, peak=min(amplitude, 0.95))
+
+
+def generate_water_texture(
+    duration_seconds: int,
+    sample_rate: int,
+    amplitude: float,
+    seed: int | None,
+) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    frame_count = duration_seconds * sample_rate
+    time_axis = _time_axis(duration_seconds, sample_rate)
+
+    white = rng.uniform(-1.0, 1.0, size=frame_count).astype(np.float32, copy=False)
+    # Lighter low-pass than wind/waves for a brighter, more constant babble.
+    flow = lfilter([0.05], [1.0, -0.9], white)
+
+    # Faster, gentler micro-modulation than wind's swell -- a near-constant
+    # level with a subtle bubbling wobble instead of gusts rolling in.
+    shimmer = 0.85 + 0.15 * np.sin(
+        2.0 * np.pi * 0.6 * time_axis + float(rng.uniform(0, 2 * np.pi))
+    )
+
+    samples = flow * shimmer * amplitude
+    return normalize(samples, peak=min(amplitude, 0.95))
+
+
+def generate_thunder_texture(
+    duration_seconds: int,
+    sample_rate: int,
+    amplitude: float,
+    seed: int | None,
+) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    frame_count = duration_seconds * sample_rate
+
+    white = rng.uniform(-1.0, 1.0, size=frame_count).astype(np.float32, copy=False)
+    rumble = lfilter([0.008], [1.0, -0.995], white).astype(np.float32)
+
+    # Rare, low-frequency boom bursts: sparse triggers shaped by a slow
+    # decay filter, then an extra low-pass so each boom reads as deep
+    # rather than a sharp crack.
+    boom_hits = rng.random(frame_count) < 0.00006
+    boom_noise = rng.uniform(-1.0, 1.0, size=frame_count).astype(np.float32, copy=False)
+    triggers = np.where(boom_hits, boom_noise, np.float32(0.0))
+    booms = lfilter([1.0], [1.0, -0.9995], triggers).astype(np.float32)
+    booms = lfilter([0.02], [1.0, -0.98], booms).astype(np.float32)
+
+    samples = (rumble * 0.5 + booms * 1.5) * amplitude
+    return normalize(samples, peak=min(amplitude, 0.95))
+
+
+def generate_chimes_texture(
+    duration_seconds: int,
+    sample_rate: int,
+    amplitude: float,
+    seed: int | None,
+) -> np.ndarray:
+    # Sparse, randomly-timed decaying tones at consonant (pentatonic)
+    # pitches -- a genuine synthesized instrument sound rather than an
+    # approximation of one, unlike birds_texture.
+    rng = np.random.default_rng(seed)
+    frame_count = duration_seconds * sample_rate
+    samples = np.zeros(frame_count, dtype=np.float32)
+
+    pitches_hz = (523.25, 587.33, 659.25, 783.99, 880.00)  # C5 D5 E5 G5 A5
+
+    position = 0
+    while position < frame_count:
+        position += int(rng.uniform(1.5, 5.0) * sample_rate)
+
+        if position >= frame_count:
+            break
+
+        chime_frames = min(int(rng.uniform(1.2, 2.5) * sample_rate), frame_count - position)
+
+        if chime_frames <= 1:
+            continue
+
+        frequency = float(rng.choice(pitches_hz)) * float(rng.choice((1.0, 2.0)))
+        chime_time = np.arange(chime_frames) / sample_rate
+        envelope = np.exp(-chime_time * 2.0)
+        tone = (np.sin(2.0 * np.pi * frequency * chime_time) * envelope).astype(np.float32)
+
+        end = position + chime_frames
+        samples[position:end] += tone
+        position = end
+
+    return normalize(samples, peak=min(amplitude, 0.9))
+
+
 def load_sample_layer(
     sample_path: Path,
     duration_seconds: int,

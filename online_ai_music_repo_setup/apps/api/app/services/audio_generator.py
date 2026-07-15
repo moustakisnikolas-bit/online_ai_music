@@ -10,8 +10,12 @@ from app.audio.dsp import (
     generate_binaural_channels,
     generate_birds_texture,
     generate_brown_noise,
+    generate_chimes_texture,
+    generate_fire_texture,
     generate_isochronic_samples,
     generate_rain_texture,
+    generate_thunder_texture,
+    generate_water_texture,
     generate_waves_texture,
     generate_wind_texture,
     load_sample_layer,
@@ -27,6 +31,20 @@ from app.audio.types import AudioMode, ChannelMode, TextureMode
 from app.services.audio_encoding import encode_audio
 from app.services.long_form_audio import render_long_form_wav
 from app.schemas.audio import AudioGenerationRequest, AudioGenerationResponse
+
+# All texture generators share the same (duration_seconds, sample_rate,
+# amplitude, seed) signature, so a lookup table scales better than a
+# growing if/elif chain as more texture types get added.
+_TEXTURE_GENERATORS = {
+    TextureMode.RAIN: generate_rain_texture,
+    TextureMode.WIND: generate_wind_texture,
+    TextureMode.WAVES: generate_waves_texture,
+    TextureMode.BIRDS: generate_birds_texture,
+    TextureMode.FIRE: generate_fire_texture,
+    TextureMode.WATER: generate_water_texture,
+    TextureMode.THUNDER: generate_thunder_texture,
+    TextureMode.CHIMES: generate_chimes_texture,
+}
 
 
 def _mono_samples(request: AudioGenerationRequest) -> np.ndarray:
@@ -114,34 +132,13 @@ def _mono_samples(request: AudioGenerationRequest) -> np.ndarray:
                         request.amplitude,
                     )
                 elif layer.kind == "texture":
-                    if layer.texture_type == TextureMode.RAIN:
-                        samples = generate_rain_texture(
-                            request.duration_seconds,
-                            request.sample_rate,
-                            request.amplitude,
-                            layer_seed,
-                        )
-                    elif layer.texture_type == TextureMode.WIND:
-                        samples = generate_wind_texture(
-                            request.duration_seconds,
-                            request.sample_rate,
-                            request.amplitude,
-                            layer_seed,
-                        )
-                    elif layer.texture_type == TextureMode.WAVES:
-                        samples = generate_waves_texture(
-                            request.duration_seconds,
-                            request.sample_rate,
-                            request.amplitude,
-                            layer_seed,
-                        )
-                    else:
-                        samples = generate_birds_texture(
-                            request.duration_seconds,
-                            request.sample_rate,
-                            request.amplitude,
-                            layer_seed,
-                        )
+                    generator = _TEXTURE_GENERATORS[layer.texture_type]
+                    samples = generator(
+                        request.duration_seconds,
+                        request.sample_rate,
+                        request.amplitude,
+                        layer_seed,
+                    )
                 elif layer.kind == "sample":
                     sample = get_sample(layer.sample_id)
                     sample_path = resolve_sample_audio_path(sample)

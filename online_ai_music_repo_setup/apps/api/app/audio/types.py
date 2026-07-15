@@ -30,3 +30,7 @@ class TextureMode(StrEnum):
     WIND = "wind"
     WAVES = "waves"
     BIRDS = "birds"
+    FIRE = "fire"
+    WATER = "water"
+    THUNDER = "thunder"
+    CHIMES = "chimes"

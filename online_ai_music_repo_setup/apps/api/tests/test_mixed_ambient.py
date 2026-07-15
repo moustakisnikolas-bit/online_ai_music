@@ -94,6 +94,36 @@ def test_generate_mixed_ambient_scene_with_waves_and_birds(tmp_path: Path) -> No
         assert wav_file.getnframes() == 16000
 
 
+def test_generate_mixed_ambient_scene_with_all_eight_textures(tmp_path: Path) -> None:
+    request = AudioGenerationRequest(
+        title="Everything At Once",
+        mode=AudioMode.MIXED_AMBIENT,
+        channels=ChannelMode.MONO,
+        ambient_layers=[
+            {"kind": "texture", "texture_type": "rain", "gain": 0.15},
+            {"kind": "texture", "texture_type": "wind", "gain": 0.15},
+            {"kind": "texture", "texture_type": "waves", "gain": 0.15},
+            {"kind": "texture", "texture_type": "birds", "gain": 0.1},
+            {"kind": "texture", "texture_type": "fire", "gain": 0.15},
+            {"kind": "texture", "texture_type": "water", "gain": 0.15},
+            {"kind": "texture", "texture_type": "thunder", "gain": 0.1},
+            {"kind": "texture", "texture_type": "chimes", "gain": 0.1},
+        ],
+        duration_seconds=2,
+        sample_rate=8000,
+        amplitude=0.1,
+        fade_in_seconds=0,
+        fade_out_seconds=0,
+        seed=11,
+    )
+
+    result = generate_audio(request, tmp_path)
+
+    with wave.open(result.file_path, "rb") as wav_file:
+        assert wav_file.getnchannels() == 1
+        assert wav_file.getnframes() == 16000
+
+
 def test_generate_mixed_ambient_scene_with_sample_layer(tmp_path: Path, monkeypatch) -> None:
     sample_audio_path = tmp_path / "rain-01.wav"
 

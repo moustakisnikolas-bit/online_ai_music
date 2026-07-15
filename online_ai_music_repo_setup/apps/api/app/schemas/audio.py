@@ -45,7 +45,10 @@ class AmbientTextureLayer(BaseModel):
     @classmethod
     def _validate_texture_type(cls, value: TextureMode) -> TextureMode:
         if value == TextureMode.NONE:
-            raise ValueError("texture_type must be rain, wind, waves or birds")
+            raise ValueError(
+                "texture_type must be one of: rain, wind, waves, birds, "
+                "fire, water, thunder, chimes"
+            )
         return value
 
 
