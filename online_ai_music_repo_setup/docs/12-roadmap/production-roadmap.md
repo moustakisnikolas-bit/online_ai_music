@@ -31,6 +31,22 @@ Definition of done: tracked file count reflects source only; `git status`
 stays clean after a fresh `pip install` and a normal generation run; CI runs
 pytest on push.
 
+Status: done, including the CI workflow, which was tracked as open here
+but not actually built until now. `.github/workflows/ci.yml` runs ruff
+and pytest on every push/PR to main, verified by running the exact same
+steps locally against a completely fresh virtualenv (not the long-lived
+dev one used throughout this work) before committing. Fixed the one
+pre-existing lint failure it surfaced (an unused import in
+`artwork_generator.py`, unrelated to any of this work) so CI starts
+clean. `mypy` is intentionally not part of the CI gate yet: it currently
+reports 13 pre-existing errors, mostly FastAPI routes returning ORM
+objects typed as response schemas (a common, usually-fine pattern FastAPI
+resolves at runtime via `response_model`, but one mypy can't verify) --
+gating on it needs a dedicated pass, not a quick fix bolted onto this one.
+
+`.aion/backups/`, `zips/`, and `unzipped_folders/` remain open decisions
+for you, not automated cleanup -- still tracked in git as before.
+
 ## Milestone 1: Multi-Layer Audio Engine
 
 Goal: let a single track combine an arbitrary number of sound layers,

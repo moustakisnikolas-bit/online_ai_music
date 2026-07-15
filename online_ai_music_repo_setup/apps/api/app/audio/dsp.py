@@ -286,7 +286,7 @@ def mix_tracks(
     frame_count: int | None = None
 
     for samples, gain in tracks:
-        if frame_count is None:
+        if mixed is None:
             frame_count = len(samples)
             mixed = (samples * gain).astype(np.float32, copy=False)
         elif len(samples) != frame_count:
