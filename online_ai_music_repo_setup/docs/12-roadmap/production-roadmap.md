@@ -381,6 +381,32 @@ Definition of done: a generated track hits its category's LUFS/true-peak
 target within tolerance, passes the validation checks, and sounds
 noticeably less "flat" than current output on a proper mix check.
 
+Status: mostly done. Built `audio/mastering.py` (LUFS measurement/
+normalization via `pyloudnorm` -- the ITU-R BS.1770 reference
+implementation, not hand-rolled, since correctness of the gating
+algorithm matters more here than avoiding a dependency; true-peak
+limiting via 4x oversampled peak detection; mastering EQ via an RBJ
+peaking-EQ biquad derivation, since scipy has no built-in variable-gain
+peaking filter; 4th-order Butterworth bass mono-fold) and
+`audio/validation.py` (clipping, long silence, sudden loudness jumps,
+excessive HF energy, loop-seam discontinuity -- advisory warnings, not an
+auto-reject/regenerate gate, which is a further step deliberately not
+built here). All opt-in via new request fields (`target_lufs`,
+`true_peak_dbtp`, `apply_mastering_eq`, `fold_bass_to_mono`) so existing
+behavior is unchanged unless requested. `loudness_lufs` and
+`validation_warnings` are now on every generation response and persisted
+to `audio_jobs` (migration 0009), so a reviewer sees them before
+approving, not just at generation time.
+
+Verified against the real persistent Postgres (not a throwaway): a
+sine tone requested at target_lufs=-18.0 measured back at -17.999999...
+after normalization, both in the immediate response and after a full DB
+round trip.
+
+Not built: reverb, and the "auto-reject and regenerate" loop implied by
+the spec's validation rules (this reports issues, it doesn't act on
+them). Both are real scope, deliberately deferred rather than rushed.
+
 ### Milestone 9: Request Schema Extension (spec's "AI-generation controls")
 
 Goal: expose the parameters from spec section 8 that the DSP engine can

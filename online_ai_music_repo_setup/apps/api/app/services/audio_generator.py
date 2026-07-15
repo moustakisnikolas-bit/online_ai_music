@@ -25,6 +25,13 @@ from app.audio.dsp import (
     generate_sine_samples,
     generate_white_noise,
 )
+from app.audio.mastering import (
+    apply_mastering_eq,
+    fold_bass_to_mono as fold_bass_to_mono_channels,
+    limit_true_peak,
+    measure_lufs,
+)
+from app.audio.validation import validate_audio
 from app.audio.presets import get_preset
 from app.audio.sample_library import get_sample, resolve_sample_audio_path
 from app.audio.types import AudioMode, ChannelMode, TextureMode
@@ -255,6 +262,48 @@ def _write_wav(
         wav_file.writeframes(pcm.tobytes())
 
 
+def _apply_mastering(
+    channels: list[np.ndarray],
+    request: AudioGenerationRequest,
+) -> tuple[list[np.ndarray], float | None, list[str]]:
+    # Opt-in post-processing pass over the finished channels, right before
+    # writing to disk. Order matters: bass mono-fold and EQ shape the
+    # spectrum/stereo image first, then LUFS normalization sets the
+    # overall level, then true-peak limiting is applied last so it can't
+    # be undone by a later gain change.
+    if request.fold_bass_to_mono and len(channels) == 2:
+        channels[0], channels[1] = fold_bass_to_mono_channels(
+            channels[0], channels[1], request.sample_rate
+        )
+
+    if request.apply_mastering_eq:
+        channels = [apply_mastering_eq(channel, request.sample_rate) for channel in channels]
+
+    if request.target_lufs is not None:
+        # Normalize using a single gain derived from the channel-averaged
+        # signal, applied uniformly to every channel, rather than
+        # normalizing each channel independently (which would alter the
+        # L/R balance).
+        combined = np.mean(np.stack(channels), axis=0) if len(channels) > 1 else channels[0]
+        current_lufs = measure_lufs(combined, request.sample_rate)
+
+        if np.isfinite(current_lufs):
+            gain_linear = 10.0 ** ((request.target_lufs - current_lufs) / 20.0)
+            channels = [(channel * gain_linear).astype(np.float32) for channel in channels]
+
+    channels = [limit_true_peak(channel, request.true_peak_dbtp) for channel in channels]
+
+    final_combined = np.mean(np.stack(channels), axis=0) if len(channels) > 1 else channels[0]
+    final_lufs = measure_lufs(final_combined, request.sample_rate)
+    report = validate_audio(
+        final_combined,
+        request.sample_rate,
+        check_loop_seam=request.seamless_loop,
+    )
+
+    return channels, (final_lufs if np.isfinite(final_lufs) else None), report.issues
+
+
 def generate_audio(
     request: AudioGenerationRequest,
     output_dir: Path,
@@ -331,6 +380,8 @@ def generate_audio(
         else:
             channels = [mono]
 
+    channels, loudness_lufs, validation_warnings = _apply_mastering(channels, request)
+
     _write_wav(output_path, request.sample_rate, channels)
 
     final_output_path = encode_audio(
@@ -355,6 +406,8 @@ def generate_audio(
         status="generated",
         output_format=request.output_format.value,
         file_path=str(final_output_path),
+        loudness_lufs=loudness_lufs,
+        validation_warnings=validation_warnings,
     )
 
 

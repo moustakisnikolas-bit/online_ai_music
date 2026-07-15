@@ -75,6 +75,8 @@ def create_completed_audio_job(
         status="completed",
         review_status="pending",
         output_file_path=response.file_path,
+        loudness_lufs=response.loudness_lufs,
+        validation_warnings=response.validation_warnings,
         started_at=now,
         completed_at=now,
     )

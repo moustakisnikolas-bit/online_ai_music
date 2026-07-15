@@ -49,6 +49,8 @@ class AudioJob(Base):
     )
     review_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_file_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    loudness_lufs: Mapped[float | None] = mapped_column(Float, nullable=True)
+    validation_warnings: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

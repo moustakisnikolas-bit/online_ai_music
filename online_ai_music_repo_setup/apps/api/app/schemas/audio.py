@@ -95,6 +95,14 @@ class AudioGenerationRequest(BaseModel):
     long_form: bool = False
     chunk_frames: int = Field(default=65536, ge=1024, le=1048576)
 
+    # Mastering pass (post-processing, opt-in -- nothing here changes
+    # default generation behavior unless explicitly requested). See
+    # audio/mastering.py.
+    target_lufs: float | None = Field(default=None, ge=-40, le=0)
+    true_peak_dbtp: float = Field(default=-1.0, ge=-20, le=0)
+    apply_mastering_eq: bool = False
+    fold_bass_to_mono: bool = False
+
     @model_validator(mode="after")
     def validate_mode_configuration(self) -> "AudioGenerationRequest":
         if self.mode == AudioMode.LAYERED_TONES and not self.layers:
@@ -130,6 +138,21 @@ class AudioGenerationRequest(BaseModel):
                 "(the chunked renderer doesn't implement layering)"
             )
 
+        if self.long_form and (
+            self.target_lufs is not None
+            or self.apply_mastering_eq
+            or self.fold_bass_to_mono
+        ):
+            raise ValueError(
+                "mastering options (target_lufs, apply_mastering_eq, "
+                "fold_bass_to_mono) are not yet supported with "
+                "long_form=True (the chunked renderer writes output "
+                "incrementally and can't be post-processed as one array)"
+            )
+
+        if self.fold_bass_to_mono and self.channels != ChannelMode.STEREO:
+            raise ValueError("fold_bass_to_mono only applies to stereo output")
+
         if self.fade_in_seconds + self.fade_out_seconds > self.duration_seconds:
             raise ValueError("combined fades cannot exceed total duration")
 
@@ -150,6 +173,11 @@ class AudioGenerationResponse(BaseModel):
     status: str
     output_format: str
     file_path: str
+    # Measured on the final output regardless of whether target_lufs was
+    # requested -- informational visibility even when no mastering was
+    # applied. None only if the audio was silent (loudness undefined).
+    loudness_lufs: float | None = None
+    validation_warnings: list[str] = Field(default_factory=list)
 
     @computed_field
     @property

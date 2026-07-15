@@ -70,6 +70,8 @@ class AudioJobResponse(BaseModel):
     review_status: str
     review_reason: str | None
     output_file_path: str | None
+    loudness_lufs: float | None
+    validation_warnings: list[str]
     error_message: str | None
     created_at: datetime
     started_at: datetime | None
