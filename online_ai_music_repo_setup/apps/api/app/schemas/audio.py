@@ -95,6 +95,20 @@ class AudioGenerationRequest(BaseModel):
     long_form: bool = False
     chunk_frames: int = Field(default=65536, ge=1024, le=1048576)
 
+    # Concert-pitch reference (A440 default, A432 alternate per the
+    # production spec). Only affects chimes_texture's named pitches --
+    # every other mode takes frequency_hz directly, so there's no "note"
+    # to retune.
+    tuning_hz: float = Field(default=440.0, gt=0, le=1000)
+
+    # Macro energy arc over the whole track (spec section 2's "emotional
+    # journey": arrival -> settling -> deep state -> resolution,
+    # simplified to a 3-point envelope). Defaults to 1.0/1.0/1.0, a flat
+    # no-op envelope, so existing behavior is unchanged unless requested.
+    energy_start: float = Field(default=1.0, ge=0, le=1.0)
+    energy_middle: float = Field(default=1.0, ge=0, le=1.0)
+    energy_end: float = Field(default=1.0, ge=0, le=1.0)
+
     # Mastering pass (post-processing, opt-in -- nothing here changes
     # default generation behavior unless explicitly requested). See
     # audio/mastering.py.

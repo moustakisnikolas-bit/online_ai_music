@@ -434,6 +434,56 @@ Definition of done: a request can specify a purpose/category and get
 sensible engine parameters back, with no field in the schema implying a
 capability that doesn't exist.
 
+Status: done, with a real bug found and fixed via live testing along the
+way. `tuning_hz` only affects `chimes_texture` (the only pitched content
+in the engine -- named pitches C5/D5/E5/G5/A5 defined relative to A440;
+every other mode takes `frequency_hz` directly, so there's no "note" to
+retune). `energy_start`/`energy_middle`/`energy_end` is a 3-point
+piecewise-linear envelope over the whole track, extending the existing
+fade machinery -- linear rather than a spline, matching the spec's own
+"gradual dynamic changes only" guidance (a spline could overshoot past
+the given values).
+
+`purpose` ended up as a lookup endpoint (`GET /audio/purposes`,
+`audio/purposes.py`) rather than a field on the generation request
+itself: an implicit-override field that silently rewrites
+`target_lufs`/`energy_start` etc. based on which ones the caller didn't
+explicitly set is a fragile pattern (Pydantic can track that via
+`model_fields_set`, but the resulting behavior is harder to reason about
+than "fetch the recommended bundle, then build your real request"). This
+is a deliberate design choice, not a shortfall against the milestone's
+literal wording -- the definition of done ("specify a purpose and get
+sensible parameters back") is satisfied by the lookup, just via GET
+instead of an implicit POST-time rewrite. The 6 profiles map the spec's
+track categories onto its loudness table (Deep Sleep -> Sleep, Stress
+Release/Anxiety-Calming/Pain-Comfort -> Relaxation, Meditation ->
+Meditation, Calm Focus -> Calm Focus), using each range's midpoint as the
+default `target_lufs`.
+
+The real finding: combining `target_lufs` with a steep `energy_start`/
+`energy_middle`/`energy_end` arc (exactly what a purpose profile like
+"sleep" does) exposed a genuine bug in Milestone 8's mastering chain that
+its own unit tests hadn't caught, because none of them combined LUFS
+normalization with a high-crest-factor signal. Normalizing integrated
+loudness to -18.5 LUFS on a track with a loud start and near-silent tail
+pushed the true peak to +4.79 dBTP (clipping); true-peak limiting then
+clawed the gain back afterward, dragging the final measured loudness to
+-28 LUFS against the -18.5 target -- a ~9.5dB miss, silently. Found only
+by testing a real purpose-driven request against the live server, not by
+the mastering tests in isolation. Fixed by capping the LUFS gain so it
+never pushes the peak past `true_peak_dbtp` in the first place, rather
+than applying the full gain and correcting afterward -- the two stages
+now coordinate instead of fighting. The honest result when a target
+can't be fully reached without clipping is a lower measured
+`loudness_lufs`, reported accurately rather than silently violating peak
+safety. This is consistent with the spec's own instruction to avoid
+heavy limiting -- a proper multi-band limiter that could hit both targets
+simultaneously was considered and not built, since that's exactly the
+"heavy limiting and audible pumping" the spec says to avoid.
+
+146/146 tests pass (14 new, including a regression test pinned to this
+exact bug's parameters).
+
 ### Milestone 10: Breathing Sync + Personalization
 
 Goal: the two spec features that are genuinely new DSP/product surface

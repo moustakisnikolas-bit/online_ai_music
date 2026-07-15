@@ -44,6 +44,34 @@ def apply_fades(
     return result
 
 
+def apply_energy_envelope(
+    samples: np.ndarray,
+    energy_start: float,
+    energy_middle: float,
+    energy_end: float,
+) -> np.ndarray:
+    # A macro amplitude arc over the whole track (start -> middle -> end),
+    # implementing the production spec's "emotional journey" concept
+    # honestly: this shapes overall loudness/intensity, not "harmonic
+    # movement" or "melodic complexity" -- those don't exist without a
+    # composition engine. Piecewise-linear between the three control
+    # points rather than a spline, matching the spec's own "gradual
+    # dynamic changes only" guidance -- linear interpolation can't
+    # overshoot past the given values the way a spline could.
+    frame_count = len(samples)
+
+    if frame_count == 0:
+        return samples
+
+    control_positions = [0, max(0, frame_count // 2), max(0, frame_count - 1)]
+    control_values = [energy_start, energy_middle, energy_end]
+    envelope = np.interp(
+        np.arange(frame_count), control_positions, control_values
+    ).astype(np.float32)
+
+    return (samples * envelope).astype(np.float32)
+
+
 def apply_loop_crossfade(
     samples: np.ndarray,
     sample_rate: int,
@@ -393,15 +421,24 @@ def generate_chimes_texture(
     sample_rate: int,
     amplitude: float,
     seed: int | None,
+    tuning_hz: float = 440.0,
 ) -> np.ndarray:
     # Sparse, randomly-timed decaying tones at consonant (pentatonic)
     # pitches -- a genuine synthesized instrument sound rather than an
-    # approximation of one, unlike birds_texture.
+    # approximation of one, unlike birds_texture. tuning_hz is the only
+    # place a concert-pitch reference matters in this engine: every other
+    # mode takes a frequency_hz directly from the caller (there's no note
+    # system to retune), but chimes has named pitches (C5/D5/E5/G5/A5)
+    # defined relative to A440 by construction.
     rng = np.random.default_rng(seed)
     frame_count = duration_seconds * sample_rate
     samples = np.zeros(frame_count, dtype=np.float32)
 
-    pitches_hz = (523.25, 587.33, 659.25, 783.99, 880.00)  # C5 D5 E5 G5 A5
+    tuning_ratio = tuning_hz / 440.0
+    pitches_hz = tuple(
+        freq * tuning_ratio
+        for freq in (523.25, 587.33, 659.25, 783.99, 880.00)  # C5 D5 E5 G5 A5
+    )
 
     position = 0
     while position < frame_count:

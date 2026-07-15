@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from app.audio.dsp import (
+    apply_energy_envelope,
     apply_fades,
     apply_loop_crossfade,
     generate_binaural_channels,
@@ -30,6 +31,7 @@ from app.audio.mastering import (
     fold_bass_to_mono as fold_bass_to_mono_channels,
     limit_true_peak,
     measure_lufs,
+    true_peak_dbtp,
 )
 from app.audio.validation import validate_audio
 from app.audio.presets import get_preset
@@ -54,6 +56,26 @@ _TEXTURE_GENERATORS = {
 }
 
 
+def _generate_texture(
+    texture_type: TextureMode,
+    duration_seconds: int,
+    sample_rate: int,
+    amplitude: float,
+    seed: int | None,
+    tuning_hz: float,
+) -> np.ndarray:
+    # tuning_hz only matters for chimes (the only texture with named,
+    # A440-relative pitches) -- passed as a keyword rather than added to
+    # every texture generator's signature, since the other seven ignore
+    # it entirely.
+    generator = _TEXTURE_GENERATORS[texture_type]
+
+    if texture_type == TextureMode.CHIMES:
+        return generator(duration_seconds, sample_rate, amplitude, seed, tuning_hz=tuning_hz)
+
+    return generator(duration_seconds, sample_rate, amplitude, seed)
+
+
 def _apply_global_textures(base: np.ndarray, request: AudioGenerationRequest) -> np.ndarray:
     # Layers request.textures under any mode's primary signal (not just
     # mixed_ambient's own ambient_layers). Called once per channel; texture
@@ -69,12 +91,13 @@ def _apply_global_textures(base: np.ndarray, request: AudioGenerationRequest) ->
 
         for index, texture in enumerate(request.textures):
             layer_seed = None if request.seed is None else request.seed + 1000 + index
-            generator = _TEXTURE_GENERATORS[texture.texture_type]
-            samples = generator(
+            samples = _generate_texture(
+                texture.texture_type,
                 request.duration_seconds,
                 request.sample_rate,
                 request.amplitude,
                 layer_seed,
+                request.tuning_hz,
             )
             yield samples, texture.gain
 
@@ -166,12 +189,13 @@ def _mono_samples(request: AudioGenerationRequest) -> np.ndarray:
                         request.amplitude,
                     )
                 elif layer.kind == "texture":
-                    generator = _TEXTURE_GENERATORS[layer.texture_type]
-                    samples = generator(
+                    samples = _generate_texture(
+                        layer.texture_type,
                         request.duration_seconds,
                         request.sample_rate,
                         request.amplitude,
                         layer_seed,
+                        request.tuning_hz,
                     )
                 elif layer.kind == "sample":
                     sample = get_sample(layer.sample_id)
@@ -224,6 +248,13 @@ def _process_channel(
     samples: np.ndarray,
     request: AudioGenerationRequest,
 ) -> np.ndarray:
+    samples = apply_energy_envelope(
+        samples,
+        request.energy_start,
+        request.energy_middle,
+        request.energy_end,
+    )
+
     samples = apply_fades(
         samples,
         request.sample_rate,
@@ -288,7 +319,26 @@ def _apply_mastering(
         current_lufs = measure_lufs(combined, request.sample_rate)
 
         if np.isfinite(current_lufs):
-            gain_linear = 10.0 ** ((request.target_lufs - current_lufs) / 20.0)
+            loudness_gain_db = request.target_lufs - current_lufs
+
+            # A signal with a high crest factor (loud peaks, quiet
+            # integrated average -- exactly what a strong energy envelope
+            # produces) can ask for a loudness gain that would push the
+            # true peak well past true_peak_dbtp. Cap the gain here so
+            # peak safety wins over hitting the exact LUFS target, rather
+            # than applying the full gain and letting limit_true_peak claw
+            # it back afterward -- that sequence silently fights itself:
+            # the correction after the fact drags the loudness back down
+            # by whatever the peak overshoot was, defeating the
+            # normalization instead of coordinating with it. The
+            # response's loudness_lufs will honestly reflect a target that
+            # couldn't be fully reached, rather than silently missing it.
+            current_peak_dbtp = true_peak_dbtp(combined)
+            if np.isfinite(current_peak_dbtp):
+                max_gain_db = request.true_peak_dbtp - current_peak_dbtp
+                loudness_gain_db = min(loudness_gain_db, max_gain_db)
+
+            gain_linear = 10.0 ** (loudness_gain_db / 20.0)
             channels = [(channel * gain_linear).astype(np.float32) for channel in channels]
 
     channels = [limit_true_peak(channel, request.true_peak_dbtp) for channel in channels]
