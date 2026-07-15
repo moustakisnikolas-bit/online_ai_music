@@ -502,6 +502,36 @@ Definition of done: a track can be generated with breathing-sync enabled
 and sound audibly different (swells timed to the specified cycle); a
 rating can be submitted against a completed track and persisted.
 
+Status: done. `apply_breathing_sync` uses a raised-cosine shape for each
+inhale/exhale phase rather than a linear ramp -- a linear ramp has a
+sharp corner at the top and bottom of every cycle that reads as a pulse;
+a raised cosine (zero slope at both ends) doesn't, matching the spec's
+"use automation rather than obvious rhythmic pulses" guidance directly,
+the same reasoning already applied to the energy envelope in Milestone 9.
+Disabled by default (`breathing_sync_enabled: false`), so existing
+behavior is unchanged unless requested.
+
+`track_ratings` (new table, migration 0010) captures the spec's section 9
+personalization fields (stress/mood before-after, sleep-onset estimate,
+completion/skip tracking, preferred instruments, uncomfortable sounds) via
+`POST`/`GET /audio/jobs/{id}/ratings`. Repository functions aren't
+unit-tested directly, consistent with `audio_jobs.py`/`youtube.py`'s
+existing repositories in this codebase -- verified live against the
+persistent Postgres instead: submitted a rating (201), listed it back
+(200, correct content), and confirmed a 404 for a nonexistent job id.
+
+154/154 tests pass (9 new, schema-validation level -- the 1-10 scale
+bounds, non-negative duration fields, defaults).
+
+This closes out every milestone that didn't need a decision from you.
+What's left: Milestone 2 (real CC0 sample sourcing -- needs manual
+curation, can't be automated from here), Milestone 5 (distributor --
+already decided: manual RouteNote until income clears the LabelGrid
+automation threshold), and Milestone 11 below (composition -- decided
+and built against Stable Audio Open, but real output quality and the
+exact community-model input schema remain unverified without a
+Replicate API token, which doesn't exist in this environment).
+
 ### Milestone 11: Melodic/Harmonic Composition Engine -- NEEDS A DECISION
 
 Goal: actually produce the instrumented, composed music the spec

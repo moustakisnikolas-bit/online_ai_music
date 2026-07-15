@@ -72,6 +72,46 @@ def apply_energy_envelope(
     return (samples * envelope).astype(np.float32)
 
 
+def apply_breathing_sync(
+    samples: np.ndarray,
+    sample_rate: int,
+    inhale_seconds: float,
+    exhale_seconds: float,
+    depth: float,
+) -> np.ndarray:
+    # Periodic swells timed to a breathing cycle (spec section 5): rise
+    # during inhale, gently resolve during exhale. Each phase uses a
+    # raised-cosine shape (smooth S-curve, zero slope at both ends) rather
+    # than a linear ramp, per the spec's "use automation rather than
+    # obvious rhythmic pulses" guidance -- a linear ramp has a sharp
+    # corner at the top and bottom of each cycle that reads as a pulse; a
+    # raised cosine doesn't. depth controls how much the envelope actually
+    # modulates volume (0 = no effect, 1 = swings fully to silence at the
+    # bottom of each exhale).
+    frame_count = len(samples)
+
+    if frame_count == 0:
+        return samples
+
+    cycle_seconds = inhale_seconds + exhale_seconds
+
+    if cycle_seconds <= 0:
+        return samples
+
+    time_axis = np.arange(frame_count) / sample_rate
+    phase_in_cycle = np.mod(time_axis, cycle_seconds)
+
+    rising = 0.5 - 0.5 * np.cos(np.pi * phase_in_cycle / inhale_seconds)
+    falling = 0.5 + 0.5 * np.cos(
+        np.pi * (phase_in_cycle - inhale_seconds) / exhale_seconds
+    )
+    envelope = np.where(phase_in_cycle < inhale_seconds, rising, falling)
+
+    gain = ((1.0 - depth) + depth * envelope).astype(np.float32)
+
+    return (samples * gain).astype(np.float32)
+
+
 def apply_loop_crossfade(
     samples: np.ndarray,
     sample_rate: int,

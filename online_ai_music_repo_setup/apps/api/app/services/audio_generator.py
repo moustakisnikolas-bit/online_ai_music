@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 
 from app.audio.dsp import (
+    apply_breathing_sync,
     apply_energy_envelope,
     apply_fades,
     apply_loop_crossfade,
@@ -254,6 +255,15 @@ def _process_channel(
         request.energy_middle,
         request.energy_end,
     )
+
+    if request.breathing_sync_enabled:
+        samples = apply_breathing_sync(
+            samples,
+            request.sample_rate,
+            request.breathing_inhale_seconds,
+            request.breathing_exhale_seconds,
+            request.breathing_sync_depth,
+        )
 
     samples = apply_fades(
         samples,

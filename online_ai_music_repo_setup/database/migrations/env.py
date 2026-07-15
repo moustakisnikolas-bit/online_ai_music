@@ -8,6 +8,7 @@ from app.models import (  # noqa: F401
     AudioAsset,
     AudioJob,
     Project,
+    TrackRating,
     YouTubeCredential,
     YouTubePublication,
 )

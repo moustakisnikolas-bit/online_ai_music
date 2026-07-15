@@ -117,6 +117,16 @@ class AudioGenerationRequest(BaseModel):
     apply_mastering_eq: bool = False
     fold_bass_to_mono: bool = False
 
+    # Breathing-sync envelope (spec section 5). Disabled by default. The
+    # spec's target cycle is 8-12s total (its own example: 4s inhale, 6s
+    # exhale); the 15s-per-phase bound below is a broad sanity limit, not
+    # an enforcement of that target -- it's presented as a recommendation,
+    # not a hard rule.
+    breathing_sync_enabled: bool = False
+    breathing_inhale_seconds: float = Field(default=4.0, gt=0, le=15)
+    breathing_exhale_seconds: float = Field(default=6.0, gt=0, le=15)
+    breathing_sync_depth: float = Field(default=0.3, ge=0, le=1.0)
+
     @model_validator(mode="after")
     def validate_mode_configuration(self) -> "AudioGenerationRequest":
         if self.mode == AudioMode.LAYERED_TONES and not self.layers:
