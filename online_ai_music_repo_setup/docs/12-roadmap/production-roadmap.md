@@ -326,6 +326,133 @@ actually looked at this in a browser -- doing a large speculative
 CSS pass with no way to see the result risked making it worse, not
 better.
 
+## Phase 2: Therapeutic Music Production Spec
+
+A detailed evidence-informed production spec was provided covering musical
+parameters, emotional arc, instrumentation, audio-engineering targets
+(LUFS, true peak, EQ, spatial), track categories, an AI-generation control
+schema, automated validation rules, and personalization. Before scoping
+milestones from it, one thing has to be said plainly:
+
+**Sections 1-3 of that spec (tempo, key, chord progressions, melody,
+"warm piano," "sustained strings," "wooden flute," "kalimba") describe
+actual composed music with real instrument timbres. The engine has no
+composition or instrument-synthesis capability at all -- it only does DSP
+synthesis (sine tones, filtered noise, sample-based nature loops).
+Producing "a piano phrase" isn't a filter setting away; it requires either
+building algorithmic composition (chord/melody generation) plus an
+instrument sound engine (sample playback or synthesis) from scratch, or
+integrating an external AI music-generation model and having AION handle
+mastering/nature-layering/packaging around its output. This is the
+largest single scope item in the project -- larger than everything built
+in Phase 1 combined -- and is deliberately its own milestone (11) pending
+a decision, rather than assumed into the others below.**
+
+Everything else in the spec extends the existing DSP engine without
+needing that capability.
+
+### Milestone 8: Audio Mastering & Validation Chain
+
+Goal: close the real gap in section 6 of the spec -- the engine currently
+has no mastering stage at all. Generated audio goes straight from
+synthesis to WAV with only a peak-normalize step; there's no loudness
+targeting, true-peak limiting, EQ shaping, reverb, or mono-compatibility
+handling.
+
+- LUFS loudness measurement and normalization (`pyloudnorm` or a
+  hand-rolled ITU-R BS.1770 implementation over the existing numpy
+  pipeline) against the spec's per-category targets (e.g. -20 to -17 LUFS
+  for sleep, -17 to -14 for relaxation).
+- True-peak limiting (oversampled peak detection + gain reduction) to the
+  spec's -1.0 dBTP default / -2.0 dBTP sleep target -- distinct from the
+  existing simple peak clamp in `_write_wav`, which doesn't account for
+  inter-sample peaks.
+- Basic EQ shaping (sub-bass control below ~30-35 Hz, smoothing the
+  2-5 kHz and 6-10 kHz regions) via `scipy.signal` biquad/shelving
+  filters, consistent with how `dsp.py` already uses `lfilter`.
+- Optional reverb (algorithmic, 3-10s decay) and mono-fold-down check for
+  bass content below ~100-150 Hz.
+- Automated validation layer implementing the spec's "Required validation
+  rules": detect sudden short-term loudness jumps, clipping, audible loop
+  boundaries, excessive high-frequency energy, long digital silence --
+  reject/flag rather than silently ship.
+
+Definition of done: a generated track hits its category's LUFS/true-peak
+target within tolerance, passes the validation checks, and sounds
+noticeably less "flat" than current output on a proper mix check.
+
+### Milestone 9: Request Schema Extension (spec's "AI-generation controls")
+
+Goal: expose the parameters from spec section 8 that the DSP engine can
+actually act on, without pretending to support the ones it can't yet
+(melodic_complexity, harmonic_tension, rhythmic_density have no effect
+without a composition engine -- they'd be silently ignored fields, which
+is worse than not exposing them).
+
+- Add fields the engine can honor now: `purpose` (maps to an extended
+  preset/category system per spec section 7), `target_lufs`,
+  `true_peak_dbtp`, `tuning_hz` (A440/A432 alternate -- trivial, it's
+  already just the frequency parameter on tone-based modes), `energy_start`
+  / `energy_middle` / `energy_end` (a macro amplitude/brightness envelope
+  over the track -- extends `apply_fades`, works on the existing
+  noise/tone/texture/sample palette even without melody).
+- Explicitly do NOT add fields with no implementation behind them yet
+  (`melodic_complexity`, `harmonic_tension`, `instrumentation` list with
+  instrument names) -- those belong to Milestone 11.
+- Extend `audio/presets.py` with the spec's track categories (Deep Sleep,
+  Stress Release, Anxiety-Calming, Meditation, Pain-Comfort, Calm Focus)
+  as parameter presets over the existing engine, not as claims of
+  matching the full spec's instrumentation.
+
+Definition of done: a request can specify a purpose/category and get
+sensible engine parameters back, with no field in the schema implying a
+capability that doesn't exist.
+
+### Milestone 10: Breathing Sync + Personalization
+
+Goal: the two spec features that are genuinely new DSP/product surface
+but don't require composition.
+
+- Breathing-sync envelope (spec section 5): a slow amplitude/filter LFO
+  timed to inhale/exhale seconds, rising through inhale and resolving
+  through exhale -- extends the existing envelope/fade machinery in
+  `dsp.py`, applied as a macro modulation over any layer combination.
+- Personalization and outcome tracking (spec section 9): new DB models
+  for before/after ratings (stress, mood, sleep-onset estimate),
+  completion/skip tracking, and stated preferences -- follows the
+  existing `AudioJob`/`YouTubePublication` model + repository pattern.
+
+Definition of done: a track can be generated with breathing-sync enabled
+and sound audibly different (swells timed to the specified cycle); a
+rating can be submitted against a completed track and persisted.
+
+### Milestone 11: Melodic/Harmonic Composition Engine -- NEEDS A DECISION
+
+Goal: actually produce the instrumented, composed music the spec
+describes (piano, pads, strings, flute, harp/kalimba, chord progressions,
+melody) -- not deferred by oversight, deferred because it's a real
+architecture decision with cost and complexity attached, the same way the
+distributor and sample-sourcing decisions were.
+
+Two real paths, not yet chosen:
+
+- **Build it**: algorithmic chord-progression + melody generation, paired
+  with a sample-based or synthesized instrument engine (extends the
+  `sample_library` pattern from Milestone 2, but for instrument notes/
+  loops instead of nature sounds, or real subtractive/wavetable synthesis
+  for pad/string/flute timbres). Fully in-house, no per-generation cost,
+  but a large, multi-part build.
+- **Integrate an external AI music-generation model/API**: AION handles
+  the parts it's already good at (mastering, nature-sound layering,
+  metadata, packaging, publishing) around a generated instrumental bed.
+  Faster to a working result, but introduces a real per-generation cost
+  and a new external dependency to evaluate (licensing terms for
+  commercial/resale use need the same scrutiny the sample-library sourcing
+  got -- many AI music generators restrict commercial redistribution the
+  same way SFX libraries do).
+
+Definition of done: not defined yet -- depends on which path gets chosen.
+
 ## Sequencing Notes
 
 - Milestones 0-3 are engine and foundation work and can proceed without any
@@ -337,3 +464,8 @@ better.
 - Milestones 6-7 (UX) intentionally come after the publishing pipeline
   exists, so the UI reflects a real release workflow instead of being
   redesigned twice.
+- Milestones 8-10 (Phase 2) can proceed independently of Milestone 11 --
+  none of them depend on composition existing.
+- Milestone 11 needs a build-vs-integrate decision before any code gets
+  written against it, the same way Milestone 5 needed a distributor
+  decision first.

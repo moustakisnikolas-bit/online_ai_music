@@ -23,6 +23,10 @@ Thumbs.db
 # Generated runtime output (produced by the app, not source)
 **/data/generated/
 
+# Local-only docker-compose port overrides (this machine has other
+# projects' containers occupying the default ports)
+docker-compose.override.yml
+
 # Build artifacts
 dist/
 build/
