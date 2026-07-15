@@ -18,7 +18,7 @@ from app.audio.dsp import (
     generate_white_noise,
 )
 from app.audio.presets import get_preset
-from app.audio.types import AudioMode, ChannelMode
+from app.audio.types import AudioMode, ChannelMode, TextureMode
 from app.services.audio_encoding import encode_audio
 from app.services.long_form_audio import render_long_form_wav
 from app.schemas.audio import AudioGenerationRequest, AudioGenerationResponse
@@ -77,56 +77,57 @@ def _mono_samples(request: AudioGenerationRequest) -> list[float]:
     if request.mode == AudioMode.MIXED_AMBIENT:
         tracks: list[tuple[list[float], float]] = []
 
-        if request.noise_mode == AudioMode.WHITE_NOISE:
-            noise = generate_white_noise(
-                request.duration_seconds,
-                request.sample_rate,
-                request.amplitude,
-                request.seed,
-            )
-        elif request.noise_mode == AudioMode.PINK_NOISE:
-            noise = generate_pink_noise(
-                request.duration_seconds,
-                request.sample_rate,
-                request.amplitude,
-                request.seed,
-            )
-        elif request.noise_mode == AudioMode.BROWN_NOISE:
-            noise = generate_brown_noise(
-                request.duration_seconds,
-                request.sample_rate,
-                request.amplitude,
-                request.seed,
-            )
-        else:
-            raise ValueError("Unsupported mixed ambient noise mode")
+        for index, layer in enumerate(request.ambient_layers):
+            layer_seed = None if request.seed is None else request.seed + index
 
-        tracks.append((noise, request.noise_gain))
+            if layer.kind == "noise":
+                if layer.noise_type == AudioMode.WHITE_NOISE:
+                    samples = generate_white_noise(
+                        request.duration_seconds,
+                        request.sample_rate,
+                        request.amplitude,
+                        layer_seed,
+                    )
+                elif layer.noise_type == AudioMode.PINK_NOISE:
+                    samples = generate_pink_noise(
+                        request.duration_seconds,
+                        request.sample_rate,
+                        request.amplitude,
+                        layer_seed,
+                    )
+                else:
+                    samples = generate_brown_noise(
+                        request.duration_seconds,
+                        request.sample_rate,
+                        request.amplitude,
+                        layer_seed,
+                    )
+            elif layer.kind == "tone":
+                samples = generate_sine_samples(
+                    layer.frequency_hz,
+                    request.duration_seconds,
+                    request.sample_rate,
+                    request.amplitude,
+                )
+            elif layer.kind == "texture":
+                if layer.texture_type == TextureMode.RAIN:
+                    samples = generate_rain_texture(
+                        request.duration_seconds,
+                        request.sample_rate,
+                        request.amplitude,
+                        layer_seed,
+                    )
+                else:
+                    samples = generate_wind_texture(
+                        request.duration_seconds,
+                        request.sample_rate,
+                        request.amplitude,
+                        layer_seed,
+                    )
+            else:
+                raise ValueError(f"Unsupported ambient layer kind: {layer.kind}")
 
-        if request.layers:
-            tones = generate_layered_tones(
-                [(layer.frequency_hz, layer.amplitude) for layer in request.layers],
-                request.duration_seconds,
-                request.sample_rate,
-            )
-            tracks.append((tones, request.tone_gain))
-
-        if request.texture_mode.value == "rain":
-            texture = generate_rain_texture(
-                request.duration_seconds,
-                request.sample_rate,
-                request.amplitude,
-                request.seed,
-            )
-            tracks.append((texture, request.texture_gain))
-        elif request.texture_mode.value == "wind":
-            texture = generate_wind_texture(
-                request.duration_seconds,
-                request.sample_rate,
-                request.amplitude,
-                request.seed,
-            )
-            tracks.append((texture, request.texture_gain))
+            tracks.append((samples, layer.gain))
 
         return mix_tracks(tracks)
 

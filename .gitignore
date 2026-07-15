@@ -21,7 +21,7 @@ venv/
 Thumbs.db
 
 # Generated runtime output (produced by the app, not source)
-online_ai_music_repo_setup/data/generated/
+**/data/generated/
 
 # Build artifacts
 dist/

@@ -548,17 +548,28 @@
     }
 
     if (mode === "mixed_ambient") {
-      payload.noise_mode = document.getElementById("noise-mode").value;
-      payload.texture_mode = document.getElementById("texture-mode").value;
-      payload.noise_gain = 0.7;
-      payload.texture_gain = 0.2;
-      payload.tone_gain = 0.2;
-      payload.layers = [
+      const textureValue = document.getElementById("texture-mode").value;
+
+      payload.ambient_layers = [
         {
+          kind: "noise",
+          noise_type: document.getElementById("noise-mode").value,
+          gain: 0.7
+        },
+        {
+          kind: "tone",
           frequency_hz: Number(document.getElementById("frequency").value),
-          amplitude: 0.05
+          gain: 0.2
         }
       ];
+
+      if (textureValue !== "none") {
+        payload.ambient_layers.push({
+          kind: "texture",
+          texture_type: textureValue,
+          gain: 0.2
+        });
+      }
     }
 
     return payload;
@@ -605,7 +616,9 @@
           context: document.getElementById("context").value,
           language: "en",
           frequency_hz: payload.frequency_hz || null,
-          texture_mode: payload.texture_mode || null
+          texture_mode: payload.mode === "mixed_ambient"
+            ? document.getElementById("texture-mode").value
+            : null
         })
       }
     );
