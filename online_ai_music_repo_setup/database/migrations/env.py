@@ -4,7 +4,13 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.db.base import Base
-from app.models import AudioAsset, Project  # noqa: F401
+from app.models import (  # noqa: F401
+    AudioAsset,
+    AudioJob,
+    Project,
+    YouTubeCredential,
+    YouTubePublication,
+)
 
 config = context.config
 

@@ -1,7 +1,7 @@
 """add audio review workflow
 
 Revision ID: 0007
-Revises: 0006
+Revises: 0005
 Create Date: 2026-07-14
 """
 
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision: str = "0007"
-down_revision: Union[str, None] = "0006"
+down_revision: Union[str, None] = "0005"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
