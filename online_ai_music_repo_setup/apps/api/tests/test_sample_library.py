@@ -38,6 +38,60 @@ def test_load_manifest_returns_empty_list_when_missing(tmp_path: Path) -> None:
     assert sample_library.load_manifest(tmp_path / "missing.json") == []
 
 
+def test_register_sample_appends_and_persists(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+
+    sample_library.register_sample(
+        sample_library.NaturalSoundSample(
+            id="piano-pad-01",
+            label="Warm Piano Pad",
+            category="instrumental",
+            filename="piano-pad-01.wav",
+            license="Stable Audio Open",
+            source_type="ai_generated",
+        ),
+        manifest_path,
+    )
+
+    entries = sample_library.load_manifest(manifest_path)
+    assert len(entries) == 1
+    assert entries[0].id == "piano-pad-01"
+    assert entries[0].source_type == "ai_generated"
+
+
+def test_register_sample_rejects_duplicate_id(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "manifest.json"
+    sample = sample_library.NaturalSoundSample(
+        id="rain-01",
+        label="Rain",
+        category="rain",
+        filename="rain-01.wav",
+        license="CC0",
+    )
+    sample_library.register_sample(sample, manifest_path)
+
+    with pytest.raises(ValueError, match="already exists"):
+        sample_library.register_sample(sample, manifest_path)
+
+
+def test_existing_manifest_entries_default_to_recording_source_type(tmp_path: Path) -> None:
+    manifest_path = _write_manifest(
+        tmp_path,
+        [
+            {
+                "id": "rain-01",
+                "label": "Rain",
+                "category": "rain",
+                "filename": "rain-01.wav",
+                "license": "CC0",
+            }
+        ],
+    )
+
+    sample = sample_library.get_sample("rain-01", manifest_path)
+    assert sample.source_type == "recording"
+
+
 def test_get_sample_found_and_not_found(tmp_path: Path) -> None:
     manifest_path = _write_manifest(
         tmp_path,
@@ -139,6 +193,7 @@ def test_list_samples_round_trips_manifest_fields(tmp_path: Path) -> None:
             "license": "CC0",
             "source_url": "https://example.com/rain-01",
             "attribution": None,
+            "source_type": "recording",
         }
     ]
 

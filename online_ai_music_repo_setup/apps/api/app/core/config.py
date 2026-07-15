@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     youtube_client_secret: str = ""
     youtube_redirect_uri: str = "http://localhost:8000/api/v1/publishing/youtube/callback"
 
+    replicate_api_token: str = ""
+    stable_audio_model: str = "stackadoc/stable-audio-open-1.0"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

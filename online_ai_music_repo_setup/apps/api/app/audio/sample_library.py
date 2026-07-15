@@ -15,6 +15,11 @@ class NaturalSoundSample:
     license: str
     source_url: str | None = None
     attribution: str | None = None
+    # "recording" (a licensed field recording, e.g. nature sounds) or
+    # "ai_generated" (produced by a model such as Stable Audio Open).
+    # Defaults to "recording" so existing manifest entries deserialize
+    # unchanged.
+    source_type: str = "recording"
 
 
 def load_manifest(manifest_path: Path = MANIFEST_PATH) -> list[NaturalSoundSample]:
@@ -38,6 +43,27 @@ def get_sample(
             return sample
 
     raise ValueError(f"Unknown natural sound sample: {sample_id}")
+
+
+def register_sample(
+    sample: NaturalSoundSample,
+    manifest_path: Path = MANIFEST_PATH,
+) -> None:
+    existing = load_manifest(manifest_path)
+
+    if any(entry.id == sample.id for entry in existing):
+        raise ValueError(f"Sample id already exists: {sample.id}")
+
+    existing.append(sample)
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(
+            {"samples": [asdict(item) for item in existing]},
+            indent=2,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
 
 
 def resolve_sample_audio_path(

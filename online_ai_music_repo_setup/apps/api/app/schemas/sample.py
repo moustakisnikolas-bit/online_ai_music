@@ -9,4 +9,5 @@ class NaturalSoundSampleResponse(BaseModel):
     license: str
     source_url: str | None
     attribution: str | None
+    source_type: str
     available: bool

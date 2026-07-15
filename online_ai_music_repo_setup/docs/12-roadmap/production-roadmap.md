@@ -453,6 +453,46 @@ Two real paths, not yet chosen:
 
 Definition of done: not defined yet -- depends on which path gets chosen.
 
+Status: decided and integration built. Chose Stable Audio Open over
+MusicGen and YuE after verifying license terms directly on primary
+sources (not aggregator summaries, which contradicted each other on
+MusicGen specifically): MusicGen's usable pretrained weights are
+CC-BY-NC 4.0 (non-commercial, confirmed via Meta's own model card and a
+GitHub issue on the repo) -- ruled out entirely, no revenue threshold
+exception exists for non-commercial licenses. YuE is genuinely Apache 2.0
+for code and weights (the cleanest license of the three) but is built for
+full pop songs with vocals/lyrics -- the opposite of the instrumental-only
+need -- and needs a serious GPU (16-80GB VRAM). Stable Audio Open is free
+for commercial use under $1M/yr revenue (Stability AI's own license page)
+and its short-clip/textural output style fits the loop-layering engine
+already built for nature sounds, rather than needing new architecture.
+
+Training an equivalent model in-house was considered and explicitly
+ruled out: that's curated training data at real scale, ML research
+expertise, and realistic training compute cost in the tens to hundreds of
+thousands of dollars -- a different category of project, not a bigger
+version of anything built so far.
+
+Implementation: reuses the sample-library infrastructure from Milestone 2
+rather than a new subsystem -- an AI-generated clip is architecturally
+the same thing as a licensed recording (a WAV file to loop and layer), now
+distinguished by a `source_type` field ("recording" vs "ai_generated").
+Generation goes through a hosted Replicate API
+(`stackadoc/stable-audio-open-1.0`, ~$0.14/generation) rather than
+self-hosted GPU inference, so no GPU management is needed. New
+`POST /audio/samples/generate` endpoint calls the model, downloads the
+result, and registers the manifest entry automatically.
+
+Not verified (no Replicate account exists in this environment): the exact
+input parameter schema for this specific community-hosted model, and
+critically, whether it actually sounds convincing for "warm piano" /
+"sustained strings" specifically -- it's built more for texture/sound
+design than melodic instruments. Recorded as an open question in
+docs/06-factories/natural-sound-sample-library.md rather than assumed.
+Everything mockable is unit tested (API request/poll/download flow,
+failure/timeout handling, manifest registration); the real API call has
+never been made.
+
 ## Sequencing Notes
 
 - Milestones 0-3 are engine and foundation work and can proceed without any

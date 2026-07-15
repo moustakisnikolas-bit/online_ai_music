@@ -86,3 +86,67 @@ thunderstorm, night crickets) -- none of their audio files have been
 added yet, so all currently show `"available": false`. Populating them
 with real, verified CC0 recordings is a manual step, not done as part of
 this milestone.
+
+## AI-generated instrumental clips (Stable Audio Open)
+
+This same library also holds AI-generated instrumental textures ("warm
+piano pad," "sustained strings") for Milestone 11 of the production
+roadmap. Architecturally these are the same thing as a nature recording
+-- a licensed WAV file that gets looped and layered -- so they reuse this
+exact manifest and the `sample` ambient layer kind, distinguished by
+`"source_type": "ai_generated"` instead of `"recording"`.
+
+Generation goes through [Stable Audio Open](https://stability.ai/news-updates/introducing-stable-audio-open)
+via a hosted Replicate API (`stackadoc/stable-audio-open-1.0`), not local
+GPU inference -- no GPU management needed, roughly $0.14 per generation.
+Chosen after directly verifying license terms on the primary sources
+(not aggregator blog posts, which contained real contradictions): the
+Stability AI Community License is free for commercial use under $1M/yr
+annual revenue, confirmed on Stability AI's own license page. Training an
+equivalent model in-house was considered and ruled out -- that's a
+different category of undertaking (curated training data at the scale of
+~13,000 hours, real ML research expertise, and realistically tens to
+hundreds of thousands of dollars in training compute), not something an
+incremental build gets you to.
+
+### Setup
+
+Set `REPLICATE_API_TOKEN` in `.env` (get one from
+[replicate.com](https://replicate.com)). `STABLE_AUDIO_MODEL` defaults to
+`stackadoc/stable-audio-open-1.0` and is configurable if that changes.
+
+### Generating a clip
+
+```
+POST /api/v1/audio/samples/generate
+{
+  "sample_id": "piano-pad-01",
+  "label": "Warm Piano Pad",
+  "category": "instrumental",
+  "prompt": "warm felt piano pad, slow, sustained, calming",
+  "duration_seconds": 30
+}
+```
+
+This calls the model, downloads the result into
+`apps/api/data/sample_library/`, and registers a manifest entry
+automatically -- no manual file placement needed, unlike CC0 recordings.
+Returns `503` if `REPLICATE_API_TOKEN` isn't set.
+
+### Known unknowns (not verifiable without real credentials)
+
+- The exact input parameter names (`prompt`, `seconds_total`, `seed`)
+  follow Stable Audio Open's typical inference interface, but
+  `stackadoc/stable-audio-open-1.0` is a community-hosted model on
+  Replicate, not an "official" model with a schema guarantee --
+  verify against the model's actual Replicate page before first real use.
+- Whether it actually sounds convincing for the spec's specific
+  instrumentation ("warm piano," "sustained strings") is unverified. It's
+  built more for texture/sound-design than melodic instruments; quality
+  for this specific use case needs a real listening test, not an
+  assumption.
+- Duration is capped at 30s by default and 47s by the schema, matching
+  Stable Audio Open's known output length limit -- generating a full
+  20-90 minute track means looping a short clip (the same
+  repeat-and-trim mechanism as nature samples), not generating the full
+  duration directly.
