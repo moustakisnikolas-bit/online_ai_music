@@ -47,6 +47,33 @@ _TEXTURE_GENERATORS = {
 }
 
 
+def _apply_global_textures(base: np.ndarray, request: AudioGenerationRequest) -> np.ndarray:
+    # Layers request.textures under any mode's primary signal (not just
+    # mixed_ambient's own ambient_layers). Called once per channel; texture
+    # generation is deterministic per seed, so calling it for both the left
+    # and right binaural channels yields the identical texture bed added to
+    # each side, rather than disturbing the binaural L/R phase relationship
+    # with independently-random content per ear.
+    if not request.textures:
+        return base
+
+    def _tracks():
+        yield base, 1.0
+
+        for index, texture in enumerate(request.textures):
+            layer_seed = None if request.seed is None else request.seed + 1000 + index
+            generator = _TEXTURE_GENERATORS[texture.texture_type]
+            samples = generator(
+                request.duration_seconds,
+                request.sample_rate,
+                request.amplitude,
+                layer_seed,
+            )
+            yield samples, texture.gain
+
+    return mix_tracks(_tracks())
+
+
 def _mono_samples(request: AudioGenerationRequest) -> np.ndarray:
     if request.mode == AudioMode.SINE:
         return generate_sine_samples(
@@ -289,12 +316,15 @@ def generate_audio(
             request.sample_rate,
             request.amplitude,
         )
+        left = _apply_global_textures(left, request)
+        right = _apply_global_textures(right, request)
         channels = [
             _process_channel(left, request),
             _process_channel(right, request),
         ]
     else:
-        mono = _process_channel(_mono_samples(request), request)
+        mono = _apply_global_textures(_mono_samples(request), request)
+        mono = _process_channel(mono, request)
 
         if request.channels == ChannelMode.STEREO:
             channels = [mono.copy(), mono.copy()]

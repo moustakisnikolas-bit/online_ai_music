@@ -87,6 +87,11 @@ class AudioGenerationRequest(BaseModel):
     ambient_layers: list[AmbientLayerRequest] = Field(
         default_factory=list, max_length=16
     )
+    # Texture beds (rain, fire, waves, ...) layered under *any* mode, not
+    # just mixed_ambient -- e.g. a sine tone or binaural beat with rain
+    # mixed underneath. Uses the same AmbientTextureLayer shape as
+    # ambient_layers' texture entries.
+    textures: list[AmbientTextureLayer] = Field(default_factory=list, max_length=8)
     long_form: bool = False
     chunk_frames: int = Field(default=65536, ge=1024, le=1048576)
 
@@ -117,6 +122,12 @@ class AudioGenerationRequest(BaseModel):
         if self.mode == AudioMode.MIXED_AMBIENT and not self.ambient_layers:
             raise ValueError(
                 "mixed_ambient requires at least one entry in ambient_layers"
+            )
+
+        if self.long_form and self.textures:
+            raise ValueError(
+                "textures are not yet supported with long_form=True "
+                "(the chunked renderer doesn't implement layering)"
             )
 
         if self.fade_in_seconds + self.fade_out_seconds > self.duration_seconds:

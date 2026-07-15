@@ -495,7 +495,7 @@
       <div id="texture-group">
         <span class="texture-group-title">Textures (select any combination)</span>
         <div class="texture-checkboxes">
-          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="rain" checked> Rain</label>
+          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="rain"> Rain</label>
           <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="wind"> Wind</label>
           <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="waves"> Waves</label>
           <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="birds"> Birds (rough synthesis)</label>
@@ -752,7 +752,8 @@
     document.getElementById("pulse-frequency-group").classList.toggle("hidden", !isochronic);
     document.getElementById("preset-group").classList.toggle("hidden", !preset);
     document.getElementById("noise-group").classList.toggle("hidden", !mixed);
-    document.getElementById("texture-group").classList.toggle("hidden", !mixed);
+    // Textures layer onto any mode, not just mixed_ambient, so this group
+    // stays visible regardless of the selected mode.
 
     document.getElementById("frequency-group").classList.toggle(
       "hidden",
@@ -839,10 +840,6 @@
     }
 
     if (mode === "mixed_ambient") {
-      const textureValues = Array.from(
-        document.querySelectorAll(".texture-checkbox:checked")
-      ).map((checkbox) => checkbox.value);
-
       payload.ambient_layers = [
         {
           kind: "noise",
@@ -855,14 +852,19 @@
           gain: 0.2
         }
       ];
+    }
 
-      for (const textureValue of textureValues) {
-        payload.ambient_layers.push({
-          kind: "texture",
-          texture_type: textureValue,
-          gain: 0.2
-        });
-      }
+    // Textures layer onto any mode's primary signal, not just
+    // mixed_ambient, so this reads the checkboxes unconditionally.
+    const textureValues = Array.from(
+      document.querySelectorAll(".texture-checkbox:checked")
+    ).map((checkbox) => checkbox.value);
+
+    if (textureValues.length > 0) {
+      payload.textures = textureValues.map((textureValue) => ({
+        texture_type: textureValue,
+        gain: 0.2
+      }));
     }
 
     return payload;
@@ -976,9 +978,8 @@
           context: document.getElementById("context").value,
           language: "en",
           frequency_hz: payload.frequency_hz || null,
-          texture_mode: (payload.ambient_layers || [])
-            .filter((layer) => layer.kind === "texture")
-            .map((layer) => layer.texture_type)
+          texture_mode: (payload.textures || [])
+            .map((texture) => texture.texture_type)
             .join(", ") || null
         })
       }
