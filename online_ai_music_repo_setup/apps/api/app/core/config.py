@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     redis_url: str = "redis://redis:6379/0"
     generated_audio_dir: str = "data/generated/audio"
 
+    youtube_client_id: str = ""
+    youtube_client_secret: str = ""
+    youtube_redirect_uri: str = "http://localhost:8000/api/v1/publishing/youtube/callback"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

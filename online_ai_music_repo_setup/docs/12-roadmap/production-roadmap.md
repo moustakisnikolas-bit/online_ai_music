@@ -111,6 +111,28 @@ video uploads to a channel you own.
 Definition of done: an approved catalog entry can be published to YouTube
 through one authenticated action, end to end.
 
+Status: implemented (OAuth connect/callback/status routes, resumable
+upload via `videos.insert`, review-status gate tied to
+`AudioJob.review_status == "approved"`, uploads default to
+`privacy_status=private` so a human still reviews on YouTube itself before
+anything goes public). Known gaps, called out rather than silently left:
+
+- Not runnable end to end in this environment: there is no live Postgres
+  here, and (like the pre-existing `review.py` / `audio_jobs.py` routes)
+  the DB-backed parts of this feature have no test coverage against a real
+  database. Everything mockable (OAuth URL construction, the
+  approval/completion guard, the resumable-upload call, channel lookup,
+  request schema validation) has unit tests; the wiring through
+  `Depends(get_db)` does not.
+- OAuth `state` is generated and required round-trip, but not validated
+  against a server-side session store (none exists yet), so it is not a
+  complete CSRF defense on its own.
+- While adding the migration, found the existing chain is already broken:
+  `0007_add_audio_review_workflow.py` declares `down_revision = "0006"`,
+  but no `0006` migration file exists in the repo. Not introduced by this
+  change; left as-is rather than silently patched over, and worth fixing
+  before anyone relies on `alembic upgrade head` against a real database.
+
 ## Milestone 5: Distributor Integration (Spotify / Apple / Amazon)
 
 Goal: get tracks onto streaming platforms that pay per stream. None of

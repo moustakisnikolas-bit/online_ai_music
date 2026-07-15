@@ -13,6 +13,7 @@ from app.api.routes.web import router as web_router
 from app.api.routes.visuals import router as visuals_router
 from app.api.routes.visual_files import router as visual_files_router
 from app.api.routes.exports import router as exports_router
+from app.api.routes.publishing import router as publishing_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -36,4 +37,5 @@ app.include_router(presets_router, prefix="/api/v1")
 app.include_router(visuals_router, prefix="/api/v1")
 app.include_router(visual_files_router, prefix="/api/v1")
 app.include_router(exports_router, prefix="/api/v1")
+app.include_router(publishing_router, prefix="/api/v1")
 app.include_router(web_router)
