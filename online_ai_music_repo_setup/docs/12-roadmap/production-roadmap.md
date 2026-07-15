@@ -212,6 +212,41 @@ Goal: a UI that reads like a real product, not an internal test form.
 Definition of done: subjective; validate side by side against a mainstream
 streaming app and a video platform's creator studio as reference points.
 
+Status: the three concrete items are implemented:
+
+- Waveform preview/scrubber: client-side decode (Web Audio API) of the
+  generated track, drawn to a canvas, with click-to-seek and a moving
+  playhead.
+- Artwork picker: a "Preview artwork" button generates a real preview with
+  a random seed before the full workflow runs; clicking again previews
+  another variation. The previewed seed is reused for the actual
+  generation, so what was previewed is what you get, rather than the
+  preview being disconnected from the final result.
+- While building this, found that Milestone 6's per-row `<audio>` players
+  broke the moment the library list re-rendered (e.g. after Approve),
+  since destroying and rebuilding the row destroyed the element that was
+  mid-playback. Replaced per-row players with a single persistent bottom
+  player bar (play/pause, seek, elapsed/total time) that lives outside the
+  re-rendered list -- this is also literally what Milestone 6's original
+  "persistent audio player" ask was, which the per-row approach only
+  partly satisfied.
+
+Verified: JS syntax-checked (`node --check`), full pytest suite green
+(62/62), and confirmed via TestClient that the served page contains every
+new element the script depends on. Not verified: actual in-browser
+behavior (waveform rendering, click-to-seek accuracy, playback). There is
+no browser automation available in this environment, so this could not be
+clicked through -- said explicitly rather than claiming a level of
+verification that didn't happen.
+
+Not done: the broader "visual system refinement" (typography, spacing,
+iconography pass informed by mainstream streaming-app patterns) beyond
+what these three features needed. That's genuinely subjective/open-ended
+work best done with visual feedback in hand, i.e. after someone has
+actually looked at this in a browser -- doing a large speculative
+CSS pass with no way to see the result risked making it worse, not
+better.
+
 ## Sequencing Notes
 
 - Milestones 0-3 are engine and foundation work and can proceed without any

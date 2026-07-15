@@ -254,6 +254,99 @@
       color: #9da7b3;
       font-size: .9rem;
     }
+
+    button.play-btn {
+      background: #21262d;
+      border: 1px solid #3d444d;
+    }
+
+    button.play-btn:hover {
+      border-color: #1f6feb;
+    }
+
+    .waveform-wrap {
+      position: relative;
+      margin-top: 10px;
+    }
+
+    #waveform-canvas {
+      display: block;
+      width: 100%;
+      height: 72px;
+      border-radius: 8px;
+      background: #0d1117;
+      cursor: pointer;
+    }
+
+    .waveform-playhead {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      width: 2px;
+      background: #e6edf3;
+      pointer-events: none;
+    }
+
+    .artwork-preview-inline {
+      margin-top: 12px;
+    }
+
+    .artwork-preview-inline img {
+      max-height: 220px;
+    }
+
+    body.has-player main {
+      padding-bottom: 100px;
+    }
+
+    .player-bar {
+      position: fixed;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 12px 20px;
+      background: rgba(13, 17, 23, 0.97);
+      border-top: 1px solid #30363d;
+      backdrop-filter: blur(6px);
+    }
+
+    .player-bar-info {
+      display: flex;
+      flex-direction: column;
+      min-width: 140px;
+      max-width: 280px;
+    }
+
+    #player-bar-title {
+      font-weight: 700;
+      font-size: .9rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .player-bar-time {
+      font-size: .75rem;
+      color: #9da7b3;
+    }
+
+    #player-bar-toggle {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      padding: 0;
+      flex-shrink: 0;
+      font-size: 1rem;
+    }
+
+    #player-bar-seek {
+      flex: 1;
+    }
   </style>
 </head>
 <body>
@@ -403,6 +496,16 @@
       </label>
     </div>
 
+    <div class="artwork-preview-inline">
+      <div class="actions" style="margin-top: 0;">
+        <button type="button" id="preview-artwork-btn" class="secondary">
+          Preview artwork
+        </button>
+        <span id="artwork-preview-status" class="status"></span>
+      </div>
+      <img id="artwork-preview-inline-img" alt="Artwork preview" class="hidden">
+    </div>
+
     <div class="actions">
       <button id="run-workflow">Run complete workflow</button>
       <button id="run-audio-only" class="secondary">Generate audio only</button>
@@ -454,6 +557,10 @@
       <div>
         <h3>Audio</h3>
         <audio id="audio-player" controls></audio>
+        <div class="waveform-wrap">
+          <canvas id="waveform-canvas" height="72"></canvas>
+          <div id="waveform-playhead" class="waveform-playhead"></div>
+        </div>
         <div id="audio-details" class="mono"></div>
         <a id="audio-download" class="download hidden" href="#">Download audio</a>
       </div>
@@ -498,6 +605,16 @@
   </section>
 </main>
 
+<div id="player-bar" class="player-bar hidden">
+  <div class="player-bar-info">
+    <span id="player-bar-title">—</span>
+    <span id="player-bar-time" class="player-bar-time">0:00 / 0:00</span>
+  </div>
+  <button id="player-bar-toggle" type="button">▶</button>
+  <input id="player-bar-seek" type="range" min="0" max="100" value="0">
+  <audio id="global-player"></audio>
+</div>
+
 <script>
   const state = {
     audio: null,
@@ -507,10 +624,75 @@
     exportBundle: null
   };
 
+  // Set by previewArtwork() so the seed a user previewed and liked is the
+  // same one used when the real workflow runs, instead of the preview being
+  // a preview of something different from what actually gets generated.
+  let previewedArtworkSeed = null;
+
   const modeElement = document.getElementById("mode");
   const channelsElement = document.getElementById("channels");
   const statusElement = document.getElementById("global-status");
   const errorElement = document.getElementById("workflow-error");
+
+  const playerBar = document.getElementById("player-bar");
+  const globalPlayer = document.getElementById("global-player");
+  const playerBarTitle = document.getElementById("player-bar-title");
+  const playerBarToggle = document.getElementById("player-bar-toggle");
+  const playerBarSeek = document.getElementById("player-bar-seek");
+  const playerBarTime = document.getElementById("player-bar-time");
+
+  function formatTime(seconds) {
+    if (!Number.isFinite(seconds)) {
+      return "0:00";
+    }
+
+    const minutes = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${minutes}:${String(secs).padStart(2, "0")}`;
+  }
+
+  // A single persistent player, rather than one <audio> per library row, so
+  // playback survives the library list being re-rendered (e.g. after an
+  // approve/reject action, which previously destroyed and rebuilt every row,
+  // interrupting any track currently playing in it).
+  function playTrack(filename, title) {
+    globalPlayer.src = `/api/v1/audio/files/${encodeURIComponent(filename)}`;
+    playerBarTitle.textContent = title;
+    playerBar.classList.remove("hidden");
+    document.body.classList.add("has-player");
+    globalPlayer.play();
+  }
+
+  playerBarToggle.addEventListener("click", () => {
+    if (globalPlayer.paused) {
+      globalPlayer.play();
+    } else {
+      globalPlayer.pause();
+    }
+  });
+
+  globalPlayer.addEventListener("play", () => {
+    playerBarToggle.textContent = "⏸";
+  });
+
+  globalPlayer.addEventListener("pause", () => {
+    playerBarToggle.textContent = "▶";
+  });
+
+  globalPlayer.addEventListener("timeupdate", () => {
+    if (globalPlayer.duration) {
+      playerBarSeek.value = (globalPlayer.currentTime / globalPlayer.duration) * 100;
+    }
+
+    playerBarTime.textContent =
+      `${formatTime(globalPlayer.currentTime)} / ${formatTime(globalPlayer.duration)}`;
+  });
+
+  playerBarSeek.addEventListener("input", () => {
+    if (globalPlayer.duration) {
+      globalPlayer.currentTime = (playerBarSeek.value / 100) * globalPlayer.duration;
+    }
+  });
 
   function step(name, text, stateName = "") {
     const element = document.getElementById(`step-${name}`);
@@ -649,6 +831,68 @@
     return payload;
   }
 
+  async function drawWaveform(url) {
+    const canvas = document.getElementById("waveform-canvas");
+    const canvasContext = canvas.getContext("2d");
+
+    try {
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+      const channelData = audioBuffer.getChannelData(0);
+
+      canvas.width = canvas.clientWidth || 600;
+      const width = canvas.width;
+      const height = canvas.height;
+      const samplesPerPixel = Math.max(1, Math.floor(channelData.length / width));
+
+      canvasContext.clearRect(0, 0, width, height);
+      canvasContext.fillStyle = "#1f6feb";
+
+      for (let x = 0; x < width; x += 1) {
+        const start = x * samplesPerPixel;
+        let min = 1.0;
+        let max = -1.0;
+
+        for (let i = 0; i < samplesPerPixel; i += 1) {
+          const sample = channelData[start + i] || 0;
+          if (sample < min) min = sample;
+          if (sample > max) max = sample;
+        }
+
+        const y1 = ((1 - max) / 2) * height;
+        const y2 = ((1 - min) / 2) * height;
+        canvasContext.fillRect(x, y1, 1, Math.max(1, y2 - y1));
+      }
+
+      await audioContext.close();
+    } catch (error) {
+      // Waveform rendering is a visual nicety on top of a working audio
+      // player; a decode failure here should never block playback/download.
+      canvasContext.clearRect(0, 0, canvas.width, canvas.height);
+    }
+  }
+
+  document.getElementById("waveform-canvas").addEventListener("click", (event) => {
+    const canvas = event.target;
+    const rect = canvas.getBoundingClientRect();
+    const ratio = (event.clientX - rect.left) / rect.width;
+    const audioPlayer = document.getElementById("audio-player");
+
+    if (audioPlayer.duration) {
+      audioPlayer.currentTime = ratio * audioPlayer.duration;
+    }
+  });
+
+  document.getElementById("audio-player").addEventListener("timeupdate", (event) => {
+    const playhead = document.getElementById("waveform-playhead");
+
+    if (event.target.duration) {
+      playhead.style.left = `${(event.target.currentTime / event.target.duration) * 100}%`;
+    }
+  });
+
   async function generateAudio() {
     step("audio", "Generating…");
     const payload = buildAudioPayload();
@@ -672,6 +916,7 @@
     document.getElementById("audio-download").classList.remove("hidden");
     document.getElementById("audio-details").textContent =
       JSON.stringify(state.audio, null, 2);
+    drawWaveform(downloadUrl);
 
     step("audio", "Completed", "complete");
     loadLibrary();
@@ -707,6 +952,43 @@
     step("metadata", "Completed", "complete");
   }
 
+  async function previewArtwork() {
+    const button = document.getElementById("preview-artwork-btn");
+    const previewStatus = document.getElementById("artwork-preview-status");
+    button.disabled = true;
+    previewStatus.textContent = "Generating preview…";
+
+    try {
+      const seed = Math.floor(Math.random() * 1000000);
+
+      const result = await jsonRequest(
+        "/api/v1/visuals/artwork/generate",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            title: document.getElementById("title").value,
+            subtitle: "Original Ambient Audio",
+            preset_name: document.getElementById("artwork-preset").value,
+            seed
+          })
+        }
+      );
+
+      previewedArtworkSeed = seed;
+
+      const img = document.getElementById("artwork-preview-inline-img");
+      img.src = `/api/v1/visuals/files/${encodeURIComponent(result.filename)}`;
+      img.classList.remove("hidden");
+      previewStatus.textContent = "Click again to see another option.";
+    } catch (error) {
+      previewStatus.textContent = "Preview failed.";
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  document.getElementById("preview-artwork-btn").addEventListener("click", previewArtwork);
+
   async function generateArtwork() {
     step("artwork", "Generating…");
 
@@ -718,7 +1000,7 @@
           title: state.metadata?.title || document.getElementById("title").value,
           subtitle: state.metadata?.subtitle || "Original Ambient Audio",
           preset_name: document.getElementById("artwork-preset").value,
-          seed: Number(document.getElementById("seed").value)
+          seed: previewedArtworkSeed ?? Number(document.getElementById("seed").value)
         })
       }
     );
@@ -860,19 +1142,7 @@
     const statusBadge = `<span class="badge badge-${escapeHtml(job.status)}">${escapeHtml(job.status)}</span>`;
     const reviewBadge = `<span class="badge badge-${escapeHtml(job.review_status)}">${escapeHtml(job.review_status)}</span>`;
 
-    const player = job.filename
-      ? `<audio controls src="/api/v1/audio/files/${encodeURIComponent(job.filename)}"></audio>`
-      : "";
-
     const canReview = job.status === "completed" && job.review_status === "pending";
-    const actions = canReview
-      ? `
-        <div class="library-row-actions">
-          <button type="button" class="approve-btn" data-job-id="${escapeHtml(job.id)}">Approve</button>
-          <button type="button" class="warning reject-btn" data-job-id="${escapeHtml(job.id)}">Reject</button>
-        </div>
-      `
-      : "";
 
     row.innerHTML = `
       <div class="library-row-header">
@@ -882,8 +1152,11 @@
       <div class="library-row-meta">
         ${escapeHtml(job.mode)} · ${formatDuration(job.duration_seconds)} · ${escapeHtml(job.channels)}
       </div>
-      ${player}
-      ${actions}
+      <div class="library-row-actions">
+        ${job.filename ? `<button type="button" class="play-btn" data-filename="${escapeHtml(job.filename)}" data-title="${escapeHtml(job.title)}">▶ Play</button>` : ""}
+        ${canReview ? `<button type="button" class="approve-btn" data-job-id="${escapeHtml(job.id)}">Approve</button>` : ""}
+        ${canReview ? `<button type="button" class="warning reject-btn" data-job-id="${escapeHtml(job.id)}">Reject</button>` : ""}
+      </div>
     `;
 
     return row;
@@ -915,6 +1188,10 @@
         for (const job of jobs) {
           list.appendChild(renderLibraryRow(job));
         }
+
+        list.querySelectorAll(".play-btn").forEach((button) => {
+          button.addEventListener("click", () => playTrack(button.dataset.filename, button.dataset.title));
+        });
 
         list.querySelectorAll(".approve-btn").forEach((button) => {
           button.addEventListener("click", () => reviewJob(button.dataset.jobId, "approve"));
