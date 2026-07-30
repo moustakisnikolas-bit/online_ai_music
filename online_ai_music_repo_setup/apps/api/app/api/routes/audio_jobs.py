@@ -1,11 +1,23 @@
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.database import get_db
-from app.repositories.audio_jobs import create_audio_job, get_audio_job, list_audio_jobs
-from app.schemas.audio_job import AudioJobCreate, AudioJobResponse
+from app.repositories.audio_jobs import (
+    create_audio_job,
+    delete_audio_job,
+    get_audio_job,
+    list_audio_jobs,
+)
+from app.schemas.audio_job import (
+    AudioJobCreate,
+    AudioJobResponse,
+    BulkDeleteRequest,
+    BulkDeleteResponse,
+    DeleteJobResponse,
+)
 from app.services.audio_queue import enqueue_audio_job
 
 router = APIRouter(prefix="/audio/jobs", tags=["audio-jobs"])
@@ -55,3 +67,52 @@ def list_audio_jobs_endpoint(
     db: Session = Depends(get_db),
 ) -> list[AudioJobResponse]:
     return list_audio_jobs(db, limit=limit)
+
+
+def _delete_job_and_file(db: Session, job_id: uuid.UUID) -> bool:
+    job = get_audio_job(db, job_id)
+
+    if job is None:
+        return False
+
+    output_path = job.output_file_path
+    deleted = delete_audio_job(db, job_id)
+
+    if deleted and output_path:
+        Path(output_path).unlink(missing_ok=True)
+
+    return deleted
+
+
+@router.post("/bulk-delete", response_model=BulkDeleteResponse)
+def bulk_delete_audio_jobs_endpoint(
+    payload: BulkDeleteRequest,
+    db: Session = Depends(get_db),
+) -> BulkDeleteResponse:
+    deleted_ids: list[uuid.UUID] = []
+    not_found_ids: list[uuid.UUID] = []
+
+    for job_id in payload.job_ids:
+        if _delete_job_and_file(db, job_id):
+            deleted_ids.append(job_id)
+        else:
+            not_found_ids.append(job_id)
+
+    return BulkDeleteResponse(deleted_ids=deleted_ids, not_found_ids=not_found_ids)
+
+
+@router.delete("/{job_id}", response_model=DeleteJobResponse)
+def delete_audio_job_endpoint(
+    job_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> DeleteJobResponse:
+    # Returns a small JSON body (not 204) so the web UI's shared
+    # jsonRequest() helper -- which always calls response.json() -- works
+    # for this endpoint the same way it does for every other one.
+    if not _delete_job_and_file(db, job_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Audio job not found.",
+        )
+
+    return DeleteJobResponse()

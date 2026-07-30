@@ -1,11 +1,18 @@
+import logging
 import secrets
+from datetime import datetime, timedelta
 from pathlib import Path
+from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.database import get_db
+from app.core.config import get_settings
 from app.repositories.audio_jobs import get_audio_job
+from app.repositories.oauth_state import consume_oauth_state, create_oauth_state
 from app.repositories.youtube import (
     create_youtube_publication,
     get_youtube_credential,
@@ -13,11 +20,17 @@ from app.repositories.youtube import (
     mark_publication_uploaded,
     upsert_youtube_credential,
 )
+from app.repositories.youtube_quota import (
+    get_or_create_today_usage,
+    record_quota_usage,
+    remaining_quota_today,
+    today_pacific,
+)
 from app.schemas.publishing import (
     YouTubeAuthorizationUrlResponse,
-    YouTubeCallbackRequest,
     YouTubeConnectionStatusResponse,
     YouTubePublicationResponse,
+    YouTubeQuotaStatusResponse,
     YouTubeUploadRequest,
 )
 from app.services.youtube_publisher import (
@@ -26,25 +39,41 @@ from app.services.youtube_publisher import (
     ensure_job_is_publishable,
     exchange_code_for_credentials,
     fetch_channel_identity,
+    scopes_cover_playlists,
+    set_video_thumbnail,
     upload_video,
 )
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/publishing/youtube", tags=["publishing"])
 
 VIDEO_DIR = Path("data/generated/video")
+ARTWORK_DIR = Path("data/generated/artwork")
+
+
+def _resolve_within(directory: Path, filename: str) -> Path | None:
+    candidate = (directory / filename).resolve()
+
+    if candidate.parent != directory.resolve() or not candidate.exists():
+        return None
+
+    return candidate
 
 
 @router.get("/authorize", response_model=YouTubeAuthorizationUrlResponse)
-def authorize_youtube() -> YouTubeAuthorizationUrlResponse:
+def authorize_youtube(db: Session = Depends(get_db)) -> YouTubeAuthorizationUrlResponse:
     state = secrets.token_urlsafe(32)
 
     try:
-        authorization_url = build_authorization_url(state)
+        authorization_url = build_authorization_url(state, db=db)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from exc
+
+    create_oauth_state(db, state=state, purpose="youtube")
 
     return YouTubeAuthorizationUrlResponse(
         authorization_url=authorization_url,
@@ -52,21 +81,42 @@ def authorize_youtube() -> YouTubeAuthorizationUrlResponse:
     )
 
 
-@router.post("/callback", response_model=YouTubeConnectionStatusResponse)
+def _callback_redirect(*, success: bool, reason: str | None = None) -> RedirectResponse:
+    if success:
+        return RedirectResponse(url="/app?youtube_connect=success")
+
+    query = f"youtube_connect=error&reason={quote(reason or 'unknown_error')}"
+    return RedirectResponse(url=f"/app?{query}")
+
+
+@router.get("/callback", include_in_schema=False)
 def youtube_oauth_callback(
-    payload: YouTubeCallbackRequest,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
     db: Session = Depends(get_db),
-) -> YouTubeConnectionStatusResponse:
+) -> RedirectResponse:
+    # Google (and every other OAuth2 provider) redirects the browser back
+    # here with a GET request and the result in the query string -- it
+    # never POSTs a JSON body. This handler receives exactly what the
+    # browser is actually sent, then hands control back to the app's own
+    # page with the outcome in the URL so the UI can show it.
+    if error:
+        return _callback_redirect(success=False, reason=error)
+
+    if not code or not state:
+        return _callback_redirect(success=False, reason="missing_parameters")
+
+    if not consume_oauth_state(db, state=state, purpose="youtube"):
+        return _callback_redirect(success=False, reason="invalid_or_expired_state")
+
     try:
-        credentials = exchange_code_for_credentials(payload.code)
+        credentials = exchange_code_for_credentials(code, db=db)
         channel_id, channel_title = fetch_channel_identity(credentials)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
+        return _callback_redirect(success=False, reason=str(exc))
 
-    record = upsert_youtube_credential(
+    upsert_youtube_credential(
         db,
         channel_id=channel_id,
         channel_title=channel_title,
@@ -76,12 +126,7 @@ def youtube_oauth_callback(
         scopes=list(credentials.scopes or []),
     )
 
-    return YouTubeConnectionStatusResponse(
-        connected=True,
-        channel_id=record.channel_id,
-        channel_title=record.channel_title,
-        connected_at=record.connected_at,
-    )
+    return _callback_redirect(success=True)
 
 
 @router.get("/status", response_model=YouTubeConnectionStatusResponse)
@@ -98,6 +143,32 @@ def youtube_connection_status(
         channel_id=record.channel_id,
         channel_title=record.channel_title,
         connected_at=record.connected_at,
+        has_playlist_scope=scopes_cover_playlists(record.scopes),
+    )
+
+
+@router.get("/quota", response_model=YouTubeQuotaStatusResponse)
+def youtube_quota_status(db: Session = Depends(get_db)) -> YouTubeQuotaStatusResponse:
+    settings = get_settings()
+    budget = settings.youtube_daily_quota_budget
+    remaining = remaining_quota_today(db, budget=budget)
+    usage = get_or_create_today_usage(db)
+
+    pacific = ZoneInfo("America/Los_Angeles")
+    tomorrow_pacific_midnight = datetime.combine(
+        today_pacific() + timedelta(days=1), datetime.min.time(), tzinfo=pacific
+    )
+
+    return YouTubeQuotaStatusResponse(
+        units_used=usage.units_used,
+        daily_budget=budget,
+        remaining=remaining,
+        uploads_remaining_today=max(
+            0,
+            (remaining - settings.youtube_quota_safety_margin_units)
+            // settings.youtube_upload_quota_cost_units,
+        ),
+        resets_at=tomorrow_pacific_midnight,
     )
 
 
@@ -124,9 +195,9 @@ def upload_to_youtube(
             detail="No YouTube channel is connected. Complete the OAuth flow first.",
         )
 
-    video_path = (VIDEO_DIR / payload.video_filename).resolve()
+    video_path = _resolve_within(VIDEO_DIR, payload.video_filename)
 
-    if video_path.parent != VIDEO_DIR.resolve() or not video_path.exists():
+    if video_path is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Video file not found.",
@@ -140,7 +211,7 @@ def upload_to_youtube(
     )
 
     try:
-        credentials = credentials_from_stored(credential)
+        credentials = credentials_from_stored(credential, db=db)
         video_id, video_url = upload_video(
             credentials,
             video_path=video_path,
@@ -157,9 +228,36 @@ def upload_to_youtube(
             detail=f"YouTube upload failed: {exc}",
         ) from exc
 
+    # This manual, single-video flow shares the same Google Cloud project
+    # quota as the album pipeline's automated uploads -- without recording
+    # usage here too, the pipeline's quota pacer would over-schedule
+    # relative to what's actually been spent.
+    record_quota_usage(db, units=get_settings().youtube_upload_quota_cost_units)
+
+    thumbnail_set = False
+
+    if payload.artwork_filename is not None:
+        artwork_path = _resolve_within(ARTWORK_DIR, payload.artwork_filename)
+
+        if artwork_path is not None:
+            try:
+                set_video_thumbnail(
+                    credentials, video_id=video_id, thumbnail_path=artwork_path
+                )
+                thumbnail_set = True
+            except Exception:
+                # The video itself already uploaded successfully -- a
+                # thumbnail failure shouldn't fail the whole publish, but
+                # thumbnail_set=False on the response makes it visible
+                # rather than silently claiming success.
+                logger.warning(
+                    "Failed to set YouTube thumbnail for video %s", video_id, exc_info=True
+                )
+
     return mark_publication_uploaded(
         db,
         publication,
         youtube_video_id=video_id,
         youtube_url=video_url,
+        thumbnail_set=thumbnail_set,
     )

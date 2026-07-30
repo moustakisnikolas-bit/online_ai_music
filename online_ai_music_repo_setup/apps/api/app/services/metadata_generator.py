@@ -21,7 +21,7 @@ class MetadataPackage:
     compliance_note: str
 
 
-def _clean_text(value: str) -> str:
+def clean_text(value: str) -> str:
     return " ".join(value.strip().split())
 
 
@@ -35,7 +35,7 @@ def generate_metadata_package(
     frequency_hz: float | None = None,
     texture_mode: str | None = None,
 ) -> MetadataPackage:
-    clean_title = _clean_text(source_title)
+    clean_title = clean_text(source_title)
     context_label = SAFE_CONTEXT_LABELS.get(context, "Ambient")
     duration_minutes = max(1, round(duration_seconds / 60))
 

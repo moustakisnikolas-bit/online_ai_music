@@ -1,10 +1,12 @@
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models.audio_job import AudioJob
+from app.models.track_rating import TrackRating
+from app.models.youtube_publishing import YouTubePublication
 from app.schemas.audio import AudioGenerationRequest, AudioGenerationResponse
 from app.schemas.audio_job import AudioJobCreate
 
@@ -45,13 +47,11 @@ def create_completed_audio_job(
     response: AudioGenerationResponse,
 ) -> AudioJob:
     # Persists a job that has already been generated synchronously (the
-    # web UI's direct generate flow), rather than one submitted to the
-    # Redis-backed queue for a worker to pick up. This is what makes a
-    # synchronously generated track show up in the review/publish
-    # pipeline, which otherwise only ever sees queue-submitted jobs.
-    # ambient_layers (mixed_ambient) has no dedicated column yet, so those
-    # layers aren't reconstructable from the row -- only the audio file
-    # and the descriptive fields the catalog view needs are persisted.
+    # web UI's direct generate flow), separately from create_audio_job
+    # above (which enqueues for the async worker instead). ambient_layers
+    # (mixed_ambient) has no dedicated column yet, so those layers aren't
+    # reconstructable from the row -- only the audio file and the
+    # descriptive fields the catalog view needs are persisted.
     now = datetime.now(timezone.utc)
     job = AudioJob(
         title=request.title,
@@ -97,3 +97,24 @@ def list_audio_jobs(db: Session, limit: int = 50) -> list[AudioJob]:
         .limit(limit)
     )
     return list(db.scalars(statement))
+
+
+def delete_audio_job(db: Session, job_id: uuid.UUID) -> bool:
+    """Deletes an audio job and everything that references it (YouTube
+    publications, track ratings) -- neither foreign key has ON DELETE
+    CASCADE, so deleting a published/rated job would otherwise fail with
+    an integrity error. Returns False if the job didn't exist. Callers
+    that need output_file_path for their own file cleanup should read it
+    (via get_audio_job) before calling this -- the row is gone once this
+    returns True.
+    """
+    job = db.get(AudioJob, job_id)
+
+    if job is None:
+        return False
+
+    db.execute(delete(YouTubePublication).where(YouTubePublication.audio_job_id == job_id))
+    db.execute(delete(TrackRating).where(TrackRating.audio_job_id == job_id))
+    db.delete(job)
+    db.commit()
+    return True

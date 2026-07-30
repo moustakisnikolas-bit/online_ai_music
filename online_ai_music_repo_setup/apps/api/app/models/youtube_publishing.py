@@ -1,7 +1,7 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, Text, func
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -62,6 +62,12 @@ class YouTubePublication(Base):
     )
     youtube_video_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     youtube_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Tracks whether a custom thumbnail was actually set, separate from the
+    # video upload succeeding -- a thumbnail failure shouldn't fail the
+    # whole publish (the video is already live), but silently swallowing it
+    # would hide that YouTube is showing a random auto-picked frame instead
+    # of the artwork.
+    thumbnail_set: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -70,4 +76,31 @@ class YouTubePublication(Base):
     )
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class YouTubeQuotaUsage(Base):
+    """Our own daily ledger of YouTube Data API v3 quota usage -- the API
+    doesn't expose real-time remaining quota, so this is how the album
+    pipeline's upload pacer knows how much room is left today. One row
+    per Pacific-Time calendar day (quota resets at Pacific midnight).
+    Every real YouTube write anywhere in the app -- not just album
+    uploads -- must record its cost here, or the pacer will over-schedule
+    relative to what's actually been spent.
+    """
+
+    __tablename__ = "youtube_quota_usage"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    usage_date: Mapped[date] = mapped_column(Date, nullable=False, unique=True)
+    units_used: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )

@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -6,6 +8,13 @@ class ArtworkGenerateRequest(BaseModel):
     subtitle: str = Field(default="Original Ambient Audio", max_length=255)
     preset_name: str = Field(default="spotify-cover", max_length=100)
     seed: int = 42
+    # "procedural" (default) keeps the existing gradient-and-text renderer,
+    # unchanged, so existing callers see no behavior change. "replicate"
+    # and "openrouter" route to a real AI image model instead -- openrouter
+    # is wired up but intentionally left unconfigured (no API key) until
+    # it's needed, see ai_artwork_generator.py.
+    provider: Literal["procedural", "replicate", "openrouter"] = "procedural"
+    style_prompt: str | None = Field(default=None, max_length=2000)
 
 
 class ArtworkGenerateResponse(BaseModel):
@@ -50,6 +59,7 @@ class ExportBundleRequest(BaseModel):
     audio_filename: str = Field(min_length=1, max_length=500)
     artwork_filename: str | None = Field(default=None, max_length=500)
     video_filename: str | None = Field(default=None, max_length=500)
+    caption_filename: str | None = Field(default=None, max_length=500)
     metadata: dict
 
 
@@ -58,3 +68,9 @@ class ExportBundleResponse(BaseModel):
     manifest_path: str
     zip_filename: str
     zip_path: str
+
+
+class RenderedVideoResponse(BaseModel):
+    filename: str
+    size_bytes: int
+    modified_at: str

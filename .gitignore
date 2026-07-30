@@ -16,12 +16,25 @@ venv/
 .env.*
 !.env.example
 
+# Auto-generated local encryption key (apps/api/.local_secret_key) --
+# created automatically on first use, never committed.
+**/.local_secret_key
+
 # OS
 .DS_Store
 Thumbs.db
 
 # Generated runtime output (produced by the app, not source)
 **/data/generated/
+
+# Sample library audio -- downloaded from Freesound at runtime by
+# freesound_importer.py, not source; multi-hundred-MB of .wav files that
+# don't belong in git history.
+**/data/sample_library/
+
+# SoundFont file for synthesizer mode -- a multi-MB binary asset, not
+# source; see apps/api/data/soundfonts/README.md for where to get it.
+**/data/soundfonts/*.sf2
 
 # Local-only docker-compose port overrides (this machine has other
 # projects' containers occupying the default ports)

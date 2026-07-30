@@ -46,10 +46,12 @@ def create_export_bundle(
     audio_dir: Path,
     artwork_dir: Path,
     video_dir: Path,
+    caption_dir: Path,
     export_dir: Path,
     audio_filename: str,
     artwork_filename: str | None,
     video_filename: str | None,
+    caption_filename: str | None,
     metadata: dict,
 ) -> tuple[Path, Path]:
     package_id = str(uuid.uuid4())
@@ -93,6 +95,14 @@ def create_export_bundle(
             {".mp4"},
         )
         copy_asset(video_path, "video")
+
+    if caption_filename:
+        caption_path = _resolve_existing_file(
+            caption_dir,
+            caption_filename,
+            {".srt"},
+        )
+        copy_asset(caption_path, "captions")
 
     metadata_path = package_root / "metadata.json"
     metadata_path.write_text(

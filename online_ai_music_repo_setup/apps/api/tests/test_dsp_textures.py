@@ -1,8 +1,11 @@
 import pytest
 
 from app.audio.dsp import (
+    generate_airplane_cabin_texture,
     generate_birds_texture,
     generate_chimes_texture,
+    generate_deep_waterfall_texture,
+    generate_distant_thunder_texture,
     generate_fire_texture,
     generate_thunder_texture,
     generate_water_texture,
@@ -14,6 +17,9 @@ _CONTINUOUS_TEXTURE_GENERATORS = {
     "fire": generate_fire_texture,
     "water": generate_water_texture,
     "thunder": generate_thunder_texture,
+    "deep_waterfall": generate_deep_waterfall_texture,
+    "distant_thunder": generate_distant_thunder_texture,
+    "airplane_cabin": generate_airplane_cabin_texture,
 }
 
 

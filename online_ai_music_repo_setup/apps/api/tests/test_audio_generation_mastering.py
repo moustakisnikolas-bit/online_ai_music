@@ -129,6 +129,27 @@ def test_generate_audio_with_fold_bass_to_mono(tmp_path: Path) -> None:
         assert wav_file.getnchannels() == 2
 
 
+def test_generate_audio_with_reverb_completes_and_reports_loudness(
+    tmp_path: Path,
+) -> None:
+    request = AudioGenerationRequest(
+        title="Reverb",
+        mode=AudioMode.SINE,
+        frequency_hz=432,
+        duration_seconds=1,
+        sample_rate=44100,
+        apply_reverb=True,
+        reverb_decay_seconds=1.5,
+        reverb_wet_level=0.4,
+    )
+
+    result = generate_audio(request, tmp_path)
+
+    assert result.status == "generated"
+    assert result.loudness_lufs is not None
+    assert result.validation_warnings == []
+
+
 def test_fold_bass_to_mono_rejected_for_mono_output() -> None:
     with pytest.raises(ValidationError, match="stereo"):
         AudioGenerationRequest(
@@ -150,6 +171,19 @@ def test_long_form_rejects_mastering_options() -> None:
             frequency_hz=432,
             long_form=True,
             target_lufs=-18.0,
+            duration_seconds=10,
+            sample_rate=8000,
+        )
+
+
+def test_long_form_rejects_reverb() -> None:
+    with pytest.raises(ValidationError, match="long_form"):
+        AudioGenerationRequest(
+            title="Long Form Reverb",
+            mode=AudioMode.SINE,
+            frequency_hz=432,
+            long_form=True,
+            apply_reverb=True,
             duration_seconds=10,
             sample_rate=8000,
         )
@@ -177,6 +211,39 @@ def test_generate_audio_flags_clipping_from_high_amplitude_layers(tmp_path: Path
     # mix_tracks peak-normalizes to 0.95, so this specific case shouldn't
     # clip -- this test documents that expectation rather than assuming it.
     assert "clipping detected" not in result.validation_warnings
+
+
+def test_texture_loudness_balancing_evens_out_crest_factor_differences(
+    tmp_path: Path,
+) -> None:
+    # Before texture loudness-balancing was added, fire (sparse transient
+    # pops) measured over 10dB quieter in perceived loudness than rain
+    # (steady broadband noise) at the same requested amplitude, even
+    # though both hit the same peak -- so combining them made fire's
+    # crackle nearly inaudible under rain's steady wash, and mix_tracks'
+    # final peak-normalize could get dragged around by whichever texture's
+    # rare spike was loudest. Base signal amplitude is set near-zero so
+    # each result's measured loudness is dominated by its texture layer.
+    def _texture_only_lufs(texture_type: str) -> float:
+        request = AudioGenerationRequest(
+            title="Texture Loudness Check",
+            mode=AudioMode.SINE,
+            frequency_hz=432,
+            amplitude=0.001,
+            textures=[{"texture_type": texture_type, "gain": 0.3}],
+            duration_seconds=3,
+            sample_rate=44100,
+            fade_in_seconds=0,
+            fade_out_seconds=0,
+            seed=1,
+        )
+        result = generate_audio(request, tmp_path)
+        return result.loudness_lufs
+
+    fire_lufs = _texture_only_lufs("fire")
+    rain_lufs = _texture_only_lufs("rain")
+
+    assert abs(fire_lufs - rain_lufs) < 4.0
 
 
 def test_measure_lufs_reusable_directly() -> None:

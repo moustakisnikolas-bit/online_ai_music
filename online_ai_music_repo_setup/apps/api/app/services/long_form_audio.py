@@ -1,37 +1,65 @@
-import math
-import random
-import struct
-import wave
 from collections.abc import Callable
 from pathlib import Path
+import wave
+
+import numpy as np
+from scipy.signal import lfilter
 
 ProgressCallback = Callable[[float], None]
 
 
-def _clamp(value: float) -> float:
-    return max(-1.0, min(1.0, value))
+def _measure_brown_noise_peak(seed: int, total_frames: int, chunk_frames: int) -> float:
+    """Run the brown-noise leaky integrator once to find its true peak.
+
+    The non-chunked path (dsp.generate_brown_noise) normalizes against the
+    exact global peak of the whole signal, so "amplitude" means "the actual
+    peak level" everywhere else in the app. True chunked/streaming rendering
+    never holds the whole signal in memory, so that exact global peak can't
+    be read off an array directly -- but the leaky integrator is cheap
+    (lfilter processed 20M samples in well under a second in testing), so a
+    first pass that only tracks a running scalar max (not the audio itself)
+    reproduces the same peak-matching behavior for a small, mode-local
+    compute cost instead of memory cost.
+    """
+    rng = np.random.default_rng(seed)
+    filter_state = np.zeros(1)
+    peak = 0.0
+    frame_index = 0
+
+    while frame_index < total_frames:
+        current_chunk = min(chunk_frames, total_frames - frame_index)
+        white = rng.uniform(-1.0, 1.0, size=current_chunk)
+        integrated, filter_state = lfilter([0.02], [1.0, -0.999], white, zi=filter_state)
+        chunk_peak = np.max(np.abs(integrated))
+        if chunk_peak > peak:
+            peak = float(chunk_peak)
+        frame_index += current_chunk
+
+    return peak
 
 
-def _fade_gain(
-    frame_index: int,
+def _fade_gains(
+    absolute_indices: np.ndarray,
     total_frames: int,
     sample_rate: int,
     fade_in_seconds: float,
     fade_out_seconds: float,
-) -> float:
-    gain = 1.0
+) -> np.ndarray:
+    gains = np.ones(len(absolute_indices), dtype=np.float64)
 
     fade_in_frames = int(fade_in_seconds * sample_rate)
     fade_out_frames = int(fade_out_seconds * sample_rate)
 
-    if fade_in_frames > 0 and frame_index < fade_in_frames:
-        gain *= frame_index / fade_in_frames
+    if fade_in_frames > 0:
+        in_mask = absolute_indices < fade_in_frames
+        gains[in_mask] *= absolute_indices[in_mask] / fade_in_frames
 
-    if fade_out_frames > 0 and frame_index >= total_frames - fade_out_frames:
-        remaining = total_frames - frame_index - 1
-        gain *= max(0.0, remaining / fade_out_frames)
+    if fade_out_frames > 0:
+        out_mask = absolute_indices >= total_frames - fade_out_frames
+        remaining = total_frames - absolute_indices[out_mask] - 1
+        gains[out_mask] *= np.maximum(0.0, remaining / fade_out_frames)
 
-    return gain
+    return gains
 
 
 def render_long_form_wav(
@@ -71,8 +99,22 @@ def render_long_form_wav(
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     total_frames = duration_seconds * sample_rate
-    generator = random.Random(seed)
-    brown_state = 0.0
+
+    brown_noise_peak = 1.0
+    if mode == "brown_noise":
+        # Two passes need the same random stream, so a missing seed must be
+        # pinned to a concrete value now rather than left to fresh OS entropy
+        # on each `default_rng(None)` call (which would make the passes
+        # diverge).
+        effective_seed = seed if seed is not None else int(np.random.SeedSequence().entropy)
+        brown_noise_peak = _measure_brown_noise_peak(effective_seed, total_frames, chunk_frames)
+        seed = effective_seed
+
+    rng = np.random.default_rng(seed)
+    # scipy.signal.lfilter's zi/zf carry the brown-noise filter's internal
+    # state across chunk boundaries, so the leaky integrator continues
+    # seamlessly from one chunk into the next instead of resetting.
+    brown_filter_state = np.zeros(1)
 
     with wave.open(str(output_path), "wb") as wav_file:
         wav_file.setnchannels(channels)
@@ -83,72 +125,53 @@ def render_long_form_wav(
 
         while frame_index < total_frames:
             current_chunk = min(chunk_frames, total_frames - frame_index)
-            frames = bytearray()
+            absolute_indices = np.arange(frame_index, frame_index + current_chunk)
+            time_positions = absolute_indices / sample_rate
+            gains = _fade_gains(
+                absolute_indices,
+                total_frames,
+                sample_rate,
+                fade_in_seconds,
+                fade_out_seconds,
+            )
 
-            for offset in range(current_chunk):
-                absolute_index = frame_index + offset
-                time_position = absolute_index / sample_rate
-                gain = _fade_gain(
-                    absolute_index,
-                    total_frames,
-                    sample_rate,
-                    fade_in_seconds,
-                    fade_out_seconds,
+            if mode == "sine":
+                mono = amplitude * np.sin(2.0 * np.pi * frequency_hz * time_positions)
+                channel_arrays = [mono] * channels
+
+            elif mode == "isochronic_tones":
+                carrier = np.sin(2.0 * np.pi * frequency_hz * time_positions)
+                modulation = 0.5 * (
+                    1.0 + np.sin(2.0 * np.pi * pulse_frequency_hz * time_positions)
                 )
+                modulated_gain = (1.0 - modulation_depth) + modulation_depth * modulation
+                mono = amplitude * modulated_gain * carrier
+                channel_arrays = [mono] * channels
 
-                if mode == "sine":
-                    value = amplitude * math.sin(
-                        2.0 * math.pi * frequency_hz * time_position
-                    )
-                    channel_values = [value] * channels
+            elif mode == "binaural_beats":
+                left = amplitude * np.sin(2.0 * np.pi * left_frequency_hz * time_positions)
+                right = amplitude * np.sin(2.0 * np.pi * right_frequency_hz * time_positions)
+                channel_arrays = [left, right]
 
-                elif mode == "isochronic_tones":
-                    carrier = math.sin(
-                        2.0 * math.pi * frequency_hz * time_position
-                    )
-                    modulation = 0.5 * (
-                        1.0
-                        + math.sin(
-                            2.0
-                            * math.pi
-                            * pulse_frequency_hz
-                            * time_position
-                        )
-                    )
-                    modulated_gain = (
-                        (1.0 - modulation_depth)
-                        + modulation_depth * modulation
-                    )
-                    value = amplitude * modulated_gain * carrier
-                    channel_values = [value] * channels
+            elif mode == "white_noise":
+                mono = rng.uniform(-amplitude, amplitude, size=current_chunk)
+                channel_arrays = [mono] * channels
 
-                elif mode == "binaural_beats":
-                    left = amplitude * math.sin(
-                        2.0 * math.pi * left_frequency_hz * time_position
-                    )
-                    right = amplitude * math.sin(
-                        2.0 * math.pi * right_frequency_hz * time_position
-                    )
-                    channel_values = [left, right]
+            elif mode == "brown_noise":
+                white = rng.uniform(-1.0, 1.0, size=current_chunk)
+                integrated, brown_filter_state = lfilter(
+                    [0.02], [1.0, -0.999], white, zi=brown_filter_state
+                )
+                mono = (integrated / brown_noise_peak) * amplitude
+                channel_arrays = [mono] * channels
 
-                elif mode == "white_noise":
-                    value = generator.uniform(-amplitude, amplitude)
-                    channel_values = [value] * channels
+            else:
+                raise ValueError(f"Unsupported long-form mode: {mode}")
 
-                elif mode == "brown_noise":
-                    brown_state += generator.uniform(-0.02, 0.02)
-                    brown_state = _clamp(brown_state)
-                    value = brown_state * amplitude
-                    channel_values = [value] * channels
+            stacked = np.stack([channel * gains for channel in channel_arrays], axis=1)
+            pcm = (np.clip(stacked, -1.0, 1.0) * 32767).astype("<i2")
+            wav_file.writeframesraw(pcm.tobytes())
 
-                else:
-                    raise ValueError(f"Unsupported long-form mode: {mode}")
-
-                for channel_value in channel_values:
-                    pcm = int(_clamp(channel_value * gain) * 32767)
-                    frames.extend(struct.pack("<h", pcm))
-
-            wav_file.writeframesraw(bytes(frames))
             frame_index += current_chunk
 
             if progress_callback is not None:

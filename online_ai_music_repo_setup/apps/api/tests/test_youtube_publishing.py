@@ -1,9 +1,15 @@
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
+from app.db.base import Base
+from app.models.app_secret import AppSecret
 from app.models.audio_job import AudioJob
-from app.schemas.publishing import YouTubeCallbackRequest, YouTubeUploadRequest
-from app.services import youtube_publisher
+from app.models.youtube_publishing import YouTubeCredential
+from app.schemas.publishing import YouTubeUploadRequest
+from app.services import secrets as secrets_service
+from app.services import token_encryption, youtube_publisher
 
 
 class _FakeSettings:
@@ -16,6 +22,22 @@ class _EmptySettings:
     youtube_client_id = ""
     youtube_client_secret = ""
     youtube_redirect_uri = "http://localhost:8000/api/v1/publishing/youtube/callback"
+
+
+@pytest.fixture
+def db(monkeypatch, tmp_path):
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine, tables=[AppSecret.__table__])
+
+    monkeypatch.setattr(token_encryption, "_LOCAL_KEY_FILE", tmp_path / ".local_secret_key")
+
+    class _EmptyEncryptionSettings:
+        token_encryption_key = ""
+
+    monkeypatch.setattr(token_encryption, "get_settings", lambda: _EmptyEncryptionSettings())
+
+    with Session(engine) as session:
+        yield session
 
 
 class _FakeInsertRequest:
@@ -61,6 +83,126 @@ class _FakeChannelsService:
         return _FakeChannelsResource(self._items)
 
 
+class _FakeSetThumbnailRequest:
+    def __init__(self, calls: list[dict], video_id: str, media_body) -> None:
+        self._calls = calls
+        self._video_id = video_id
+        self._media_body = media_body
+
+    def execute(self):
+        self._calls.append({"videoId": self._video_id, "media_body": self._media_body})
+        return {}
+
+
+class _FakeThumbnailsResource:
+    def __init__(self, calls: list[dict]) -> None:
+        self._calls = calls
+
+    def set(self, *, videoId, media_body):
+        return _FakeSetThumbnailRequest(self._calls, videoId, media_body)
+
+
+class _FakeThumbnailsService:
+    def __init__(self, calls: list[dict]) -> None:
+        self._calls = calls
+
+    def thumbnails(self):
+        return _FakeThumbnailsResource(self._calls)
+
+
+class _FakePlaylistsInsertRequest:
+    def __init__(self, response: dict) -> None:
+        self._response = response
+
+    def execute(self):
+        return self._response
+
+
+class _FakePlaylistsResource:
+    def __init__(self, response: dict) -> None:
+        self._response = response
+
+    def insert(self, **_kwargs):
+        return _FakePlaylistsInsertRequest(self._response)
+
+
+class _FakePlaylistItemsInsertRequest:
+    def __init__(self, calls: list[dict], kwargs: dict, response: dict) -> None:
+        self._calls = calls
+        self._kwargs = kwargs
+        self._response = response
+
+    def execute(self):
+        self._calls.append(self._kwargs)
+        return self._response
+
+
+class _FakePlaylistItemsResource:
+    def __init__(self, calls: list[dict], response: dict) -> None:
+        self._calls = calls
+        self._response = response
+
+    def insert(self, **kwargs):
+        return _FakePlaylistItemsInsertRequest(self._calls, kwargs, self._response)
+
+
+class _FakePlaylistService:
+    def __init__(self, playlists_response: dict | None = None, playlist_items_response: dict | None = None) -> None:
+        self._playlists_response = playlists_response or {}
+        self._playlist_items_response = playlist_items_response or {}
+        self.playlist_item_calls: list[dict] = []
+
+    def playlists(self):
+        return _FakePlaylistsResource(self._playlists_response)
+
+    def playlistItems(self):
+        return _FakePlaylistItemsResource(self.playlist_item_calls, self._playlist_items_response)
+
+
+def test_scopes_cover_playlists_true_for_broad_scope() -> None:
+    assert youtube_publisher.scopes_cover_playlists(["https://www.googleapis.com/auth/youtube"]) is True
+
+
+def test_scopes_cover_playlists_false_for_narrow_legacy_scopes() -> None:
+    legacy_scopes = [
+        "https://www.googleapis.com/auth/youtube.upload",
+        "https://www.googleapis.com/auth/youtube.readonly",
+    ]
+    assert youtube_publisher.scopes_cover_playlists(legacy_scopes) is False
+
+
+def test_scopes_cover_playlists_false_for_none_or_empty() -> None:
+    assert youtube_publisher.scopes_cover_playlists(None) is False
+    assert youtube_publisher.scopes_cover_playlists([]) is False
+
+
+def test_create_playlist_returns_id_and_url(monkeypatch) -> None:
+    fake_service = _FakePlaylistService(playlists_response={"id": "PL123"})
+    monkeypatch.setattr(youtube_publisher, "build", lambda *a, **k: fake_service)
+
+    playlist_id, playlist_url = youtube_publisher.create_playlist(
+        object(), title="Focus Vol. 1", description="10 focus tracks"
+    )
+
+    assert playlist_id == "PL123"
+    assert playlist_url == "https://www.youtube.com/playlist?list=PL123"
+
+
+def test_add_video_to_playlist_calls_playlist_items_insert(monkeypatch) -> None:
+    fake_service = _FakePlaylistService(playlist_items_response={"id": "PLI456"})
+    monkeypatch.setattr(youtube_publisher, "build", lambda *a, **k: fake_service)
+
+    item_id = youtube_publisher.add_video_to_playlist(
+        object(), playlist_id="PL123", video_id="V789"
+    )
+
+    assert item_id == "PLI456"
+    assert len(fake_service.playlist_item_calls) == 1
+    body = fake_service.playlist_item_calls[0]["body"]
+    assert body["snippet"]["playlistId"] == "PL123"
+    assert body["snippet"]["resourceId"]["videoId"] == "V789"
+
+
 def test_ensure_job_is_publishable_requires_job() -> None:
     with pytest.raises(ValueError, match="not found"):
         youtube_publisher.ensure_job_is_publishable(None)
@@ -86,17 +228,19 @@ def test_ensure_job_is_publishable_accepts_approved_completed_job() -> None:
     assert youtube_publisher.ensure_job_is_publishable(job) is job
 
 
-def test_build_authorization_url_requires_oauth_configuration(monkeypatch) -> None:
+def test_build_authorization_url_requires_oauth_configuration(monkeypatch, db) -> None:
     monkeypatch.setattr(youtube_publisher, "get_settings", lambda: _EmptySettings())
+    monkeypatch.setattr(secrets_service, "get_settings", lambda: _EmptySettings())
 
     with pytest.raises(ValueError, match="not configured"):
-        youtube_publisher.build_authorization_url("state")
+        youtube_publisher.build_authorization_url("state", db=db)
 
 
-def test_build_authorization_url_returns_google_oauth_url(monkeypatch) -> None:
+def test_build_authorization_url_returns_google_oauth_url(monkeypatch, db) -> None:
     monkeypatch.setattr(youtube_publisher, "get_settings", lambda: _FakeSettings())
+    monkeypatch.setattr(secrets_service, "get_settings", lambda: _FakeSettings())
 
-    url = youtube_publisher.build_authorization_url("test-state")
+    url = youtube_publisher.build_authorization_url("test-state", db=db)
 
     assert url.startswith("https://accounts.google.com/o/oauth2/")
     assert "state=test-state" in url
@@ -156,6 +300,59 @@ def test_upload_video_raises_for_missing_file(tmp_path) -> None:
         )
 
 
+def test_set_video_thumbnail_calls_thumbnails_set(monkeypatch, tmp_path) -> None:
+    thumbnail_path = tmp_path / "cover.png"
+    thumbnail_path.write_bytes(b"fake png bytes")
+
+    calls: list[dict] = []
+    fake_service = _FakeThumbnailsService(calls)
+    monkeypatch.setattr(youtube_publisher, "build", lambda *a, **k: fake_service)
+    monkeypatch.setattr(youtube_publisher, "MediaFileUpload", lambda *a, **k: object())
+
+    youtube_publisher.set_video_thumbnail(
+        object(), video_id="abc123", thumbnail_path=thumbnail_path
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["videoId"] == "abc123"
+
+
+def test_set_video_thumbnail_raises_for_missing_file(tmp_path) -> None:
+    with pytest.raises(FileNotFoundError):
+        youtube_publisher.set_video_thumbnail(
+            object(), video_id="abc123", thumbnail_path=tmp_path / "missing.png"
+        )
+
+
+def test_credentials_from_stored_decrypts_tokens(monkeypatch, db) -> None:
+    from cryptography.fernet import Fernet
+
+    key = Fernet.generate_key().decode("utf-8")
+
+    class _EncryptionSettings:
+        token_encryption_key = key
+
+    monkeypatch.setattr(token_encryption, "get_settings", lambda: _EncryptionSettings())
+    encrypted_access = token_encryption.encrypt_token("real-access-token")
+    encrypted_refresh = token_encryption.encrypt_token("real-refresh-token")
+
+    monkeypatch.setattr(youtube_publisher, "get_settings", lambda: _FakeSettings())
+    monkeypatch.setattr(secrets_service, "get_settings", lambda: _FakeSettings())
+
+    record = YouTubeCredential(
+        channel_id="UC123",
+        access_token=encrypted_access,
+        refresh_token=encrypted_refresh,
+        token_expiry=None,
+        scopes=youtube_publisher.SCOPES,
+    )
+
+    credentials = youtube_publisher.credentials_from_stored(record, db=db)
+
+    assert credentials.token == "real-access-token"
+    assert credentials.refresh_token == "real-refresh-token"
+
+
 def test_youtube_upload_request_rejects_invalid_privacy_status() -> None:
     with pytest.raises(ValidationError):
         YouTubeUploadRequest(
@@ -174,8 +371,3 @@ def test_youtube_upload_request_defaults_to_private() -> None:
     )
 
     assert request.privacy_status == "private"
-
-
-def test_youtube_callback_request_requires_code_and_state() -> None:
-    with pytest.raises(ValidationError):
-        YouTubeCallbackRequest(code="", state="")

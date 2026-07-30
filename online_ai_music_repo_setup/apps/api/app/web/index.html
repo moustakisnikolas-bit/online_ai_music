@@ -10,20 +10,93 @@
       color-scheme: dark;
       background: #0d1117;
       color: #e6edf3;
+
+      /* Spotify-inspired palette. Void = sidebar, base = main content,
+         elevated = panels/cards, highlight = hover state. */
+      --bg-void: #000000;
+      --bg-base: #121212;
+      --bg-elevated: #181818;
+      --bg-highlight: #282828;
+      --accent: #1DB954;
+      --accent-secondary: #1f6feb;
+      --text-primary: #FFFFFF;
+      --text-secondary: #B3B3B3;
+      --border-subtle: rgba(255, 255, 255, .08);
     }
 
     body {
       margin: 0;
       min-height: 100vh;
-      background:
-        radial-gradient(circle at top left, #172743 0, transparent 36%),
-        radial-gradient(circle at bottom right, #10243d 0, transparent 30%),
-        #0d1117;
+      background: var(--bg-base);
+    }
+
+    .app-shell {
+      display: flex;
+      min-height: 100vh;
+      align-items: flex-start;
+    }
+
+    .sidebar {
+      width: 240px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      align-self: flex-start;
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--bg-void);
+      padding: 20px 12px;
+      box-sizing: border-box;
+    }
+
+    .sidebar-brand {
+      font-weight: 800;
+      font-size: 1.3rem;
+      letter-spacing: .04em;
+      padding: 8px 12px 20px;
+      color: var(--text-primary);
+    }
+
+    .sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sidebar-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: transparent;
+      color: var(--text-secondary);
+      font-weight: 700;
+      padding: 11px 12px;
+      border-radius: 6px;
+      text-align: left;
+      width: 100%;
+    }
+
+    .sidebar-nav-item:hover {
+      background: var(--bg-highlight);
+      color: var(--text-primary);
+    }
+
+    .sidebar-nav-item.active {
+      background: var(--bg-highlight);
+      color: var(--text-primary);
+    }
+
+    .sidebar-nav-icon {
+      font-size: 1.15rem;
+      width: 20px;
+      text-align: center;
+      font-variant-emoji: text;
     }
 
     main {
+      flex: 1;
+      min-width: 0;
       max-width: 1120px;
-      margin: 0 auto;
       padding: 32px 20px 72px;
     }
 
@@ -37,13 +110,13 @@
     }
 
     .subtitle {
-      color: #9da7b3;
+      color: var(--text-secondary);
       margin-bottom: 28px;
     }
 
     .panel {
-      background: rgba(22, 27, 34, 0.96);
-      border: 1px solid #30363d;
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
       border-radius: 16px;
       padding: 24px;
       margin-bottom: 22px;
@@ -56,6 +129,40 @@
       gap: 16px;
     }
 
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(0, 0, 0, .6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-box {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 16px;
+      padding: 24px;
+      max-width: 480px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, .4);
+    }
+
+    .modal-box h2 {
+      margin-top: 0;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 16px;
+      align-items: center;
+    }
+
     .workflow-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -66,7 +173,7 @@
       display: grid;
       gap: 7px;
       font-size: .9rem;
-      color: #c9d1d9;
+      color: var(--text-secondary);
     }
 
     input, select, textarea, button {
@@ -79,8 +186,8 @@
       padding: 11px 12px;
       border-radius: 9px;
       border: 1px solid #3d444d;
-      background: #0d1117;
-      color: #e6edf3;
+      background: var(--bg-base);
+      color: var(--text-primary);
     }
 
     input[type="checkbox"] {
@@ -88,13 +195,13 @@
       padding: 0;
       border: none;
       background: none;
-      accent-color: #238636;
+      accent-color: var(--accent);
     }
 
     .texture-group-title {
       display: block;
       font-size: .9rem;
-      color: #c9d1d9;
+      color: var(--text-secondary);
       margin-bottom: 7px;
     }
 
@@ -109,7 +216,7 @@
       align-items: center;
       gap: 6px;
       font-size: .85rem;
-      color: #c9d1d9;
+      color: var(--text-secondary);
       cursor: pointer;
     }
 
@@ -123,13 +230,13 @@
       border-radius: 10px;
       padding: 12px 18px;
       cursor: pointer;
-      background: #238636;
-      color: white;
+      background: var(--accent);
+      color: var(--text-primary);
       font-weight: 700;
     }
 
     button.secondary {
-      background: #1f6feb;
+      background: var(--accent-secondary);
     }
 
     button.warning {
@@ -150,7 +257,7 @@
     }
 
     .status {
-      color: #9da7b3;
+      color: var(--text-secondary);
       min-height: 24px;
     }
 
@@ -168,14 +275,14 @@
     }
 
     .step {
-      border: 1px solid #30363d;
+      border: 1px solid var(--border-subtle);
       border-radius: 12px;
       padding: 16px;
-      background: #11161d;
+      background: var(--bg-elevated);
     }
 
     .step.complete {
-      border-color: #238636;
+      border-color: var(--accent);
     }
 
     .step.failed {
@@ -191,7 +298,7 @@
     img {
       max-height: 420px;
       object-fit: contain;
-      background: #0d1117;
+      background: var(--bg-base);
     }
 
     code {
@@ -203,8 +310,8 @@
       display: inline-block;
       padding: 10px 14px;
       border-radius: 9px;
-      background: #1f6feb;
-      color: white;
+      background: var(--accent-secondary);
+      color: var(--text-primary);
       text-decoration: none;
       font-weight: 700;
       margin: 6px 6px 0 0;
@@ -213,8 +320,8 @@
     .notice {
       padding: 12px;
       border-radius: 10px;
-      background: #1b2638;
-      color: #b6c2cf;
+      background: var(--bg-highlight);
+      color: var(--text-secondary);
       margin-top: 18px;
       font-size: .9rem;
     }
@@ -226,11 +333,13 @@
       word-break: break-word;
     }
 
+    /* Used by Settings' secret rows (renderSecretRow()) -- the Library
+       itself now uses the .library-card grid below instead. */
     .library-row {
-      border: 1px solid #30363d;
+      border: 1px solid var(--border-subtle);
       border-radius: 12px;
       padding: 16px;
-      background: #11161d;
+      background: var(--bg-elevated);
       margin-bottom: 12px;
     }
 
@@ -247,7 +356,7 @@
     }
 
     .library-row-meta {
-      color: #9da7b3;
+      color: var(--text-secondary);
       font-size: .85rem;
     }
 
@@ -265,8 +374,120 @@
     .badge-approved { background: #0d3320; color: #7ee787; }
     .badge-rejected { background: #3d0d12; color: #ff7b72; }
     .badge-completed { background: #0d2b47; color: #79c0ff; }
-    .badge-queued, .badge-processing { background: #21262d; color: #c9d1d9; }
+    .badge-queued, .badge-processing { background: var(--bg-highlight); color: var(--text-secondary); }
     .badge-failed, .badge-queue_failed { background: #3d0d12; color: #ff7b72; }
+
+    .album-card {
+      background: var(--bg-highlight);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 14px;
+      cursor: pointer;
+    }
+
+    .album-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .album-card-title {
+      font-weight: 700;
+    }
+
+    .album-track-grid {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 6px;
+    }
+
+    .album-track-cell {
+      height: 8px;
+      border-radius: 4px;
+      background: var(--bg-elevated);
+    }
+
+    .album-track-cell.status-pending { background: #4a4a4a; }
+    .album-track-cell.status-harmony_passed,
+    .album-track-cell.status-audio_rendered,
+    .album-track-cell.status-video_rendered { background: #e3b341; }
+    .album-track-cell.status-uploaded { background: #79c0ff; }
+    .album-track-cell.status-playlist_added { background: #7ee787; }
+    .album-track-cell.status-failed { background: #ff7b72; }
+
+    .album-track-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .album-track-row:last-child {
+      border-bottom: none;
+    }
+
+    .album-progress-bar {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--bg-elevated);
+      overflow: hidden;
+      margin: 6px 0;
+    }
+
+    .album-progress-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: #79c0ff;
+      transition: width .4s ease;
+    }
+
+    .album-progress-bar-fill.status-failed { background: #ff7b72; }
+    .album-progress-bar-fill.status-playlist_added { background: #7ee787; }
+
+    .album-progress-label {
+      font-size: .78rem;
+      color: var(--text-secondary);
+    }
+
+    .album-track-row .album-progress-bar {
+      width: 160px;
+      margin: 0;
+    }
+
+    .album-toast-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 340px;
+    }
+
+    .album-toast {
+      background: var(--bg-elevated);
+      border: 1px solid var(--border-subtle);
+      border-left: 4px solid #79c0ff;
+      border-radius: 10px;
+      padding: 12px 14px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, .35);
+      font-size: .88rem;
+      animation: album-toast-in .2s ease;
+    }
+
+    .album-toast.success { border-left-color: #7ee787; }
+    .album-toast.error { border-left-color: #ff7b72; }
+
+    @keyframes album-toast-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
 
     .library-row-actions {
       margin-top: 10px;
@@ -281,17 +502,223 @@
     }
 
     .library-empty {
-      color: #9da7b3;
+      color: var(--text-secondary);
       font-size: .9rem;
     }
 
+    .library-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 20px;
+    }
+
+    .library-card {
+      background: var(--bg-elevated);
+      border-radius: 8px;
+      padding: 12px;
+      transition: background .15s ease;
+    }
+
+    .library-card:hover {
+      background: var(--bg-highlight);
+    }
+
+    .library-card-cover {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
+      overflow: hidden;
+      transition: transform .15s ease, box-shadow .15s ease;
+    }
+
+    .library-card:hover .library-card-cover {
+      transform: scale(1.03);
+      box-shadow: 0 12px 24px rgba(0, 0, 0, .5);
+    }
+
+    .library-card-play {
+      margin: 10px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      padding: 0;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .15s ease, transform .15s ease;
+      transform: translateY(6px);
+    }
+
+    .library-card:hover .library-card-play {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+
+    .library-card-select {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .library-card.selected {
+      outline: 2px solid var(--accent-secondary);
+      outline-offset: 2px;
+      border-radius: 10px;
+    }
+
+    .library-card-delete {
+      background: transparent;
+      border: 1px solid #3d444d;
+      color: var(--text-secondary);
+    }
+
+    .library-card-delete:hover {
+      border-color: #da3633;
+      color: #ff7b72;
+    }
+
+    #layer-volumes-panel {
+      margin-top: 20px;
+      padding-top: 4px;
+    }
+
+    #layer-volumes-panel h3 {
+      margin-bottom: 4px;
+    }
+
+    #layer-volumes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .layer-volume-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .layer-volume-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: .9rem;
+      color: var(--text-secondary);
+    }
+
+    .layer-volume-percent {
+      font-weight: 700;
+      color: var(--text-primary);
+      min-width: 42px;
+      text-align: right;
+    }
+
+    .layer-volume-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 999px;
+      background: var(--bg-highlight);
+      padding: 0;
+      border: none;
+      cursor: pointer;
+    }
+
+    .layer-volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: 0;
+    }
+
+    .layer-volume-slider::-moz-range-thumb {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: 0;
+    }
+
+    .layer-volume-slider::-moz-range-track {
+      height: 6px;
+      border-radius: 999px;
+      background: var(--bg-highlight);
+    }
+
+    .library-card-title {
+      font-weight: 700;
+      margin-bottom: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .library-card-meta {
+      color: var(--text-secondary);
+      font-size: .8rem;
+      margin-bottom: 8px;
+    }
+
+    .library-card-badges {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .library-card-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .library-card-actions button {
+      padding: 7px 12px;
+      font-size: .85rem;
+    }
+
+    .secret-row-controls {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .secret-row-controls input {
+      flex: 1;
+      min-width: 220px;
+    }
+
+    .secret-row-controls button {
+      padding: 10px 14px;
+      white-space: nowrap;
+    }
+
+    .badge-database { background: #0d3320; color: #7ee787; }
+    .badge-environment { background: #0d2b47; color: #79c0ff; }
+    .badge-unconfigured { background: #21262d; color: #9da7b3; }
+
     button.play-btn {
-      background: #21262d;
+      background: var(--bg-highlight);
       border: 1px solid #3d444d;
     }
 
     button.play-btn:hover {
-      border-color: #1f6feb;
+      border-color: var(--accent-secondary);
     }
 
     .waveform-wrap {
@@ -304,7 +731,7 @@
       width: 100%;
       height: 72px;
       border-radius: 8px;
-      background: #0d1117;
+      background: var(--bg-base);
       cursor: pointer;
     }
 
@@ -314,7 +741,7 @@
       bottom: 0;
       left: 0;
       width: 2px;
-      background: #e6edf3;
+      background: var(--text-primary);
       pointer-events: none;
     }
 
@@ -340,9 +767,17 @@
       align-items: center;
       gap: 16px;
       padding: 12px 20px;
-      background: rgba(13, 17, 23, 0.97);
-      border-top: 1px solid #30363d;
+      background: rgba(24, 24, 24, .95);
+      border-top: 1px solid var(--border-subtle);
       backdrop-filter: blur(6px);
+    }
+
+    .player-bar-cover {
+      width: 48px;
+      height: 48px;
+      border-radius: 4px;
+      flex-shrink: 0;
+      background: var(--bg-highlight);
     }
 
     .player-bar-info {
@@ -377,17 +812,150 @@
     #player-bar-seek {
       flex: 1;
     }
+
+    .sidebar-nav-item {
+      transition: background .12s ease, color .12s ease;
+    }
+
+    button {
+      transition: transform .08s ease;
+    }
+
+    button:active {
+      transform: scale(.97);
+    }
+
+    @keyframes view-fade-in {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: none; }
+    }
+
+    .view {
+      animation: view-fade-in .18s ease;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .sidebar-nav-item,
+      button,
+      .library-card-cover,
+      .library-card-play {
+        transition: none !important;
+      }
+
+      .view {
+        animation: none !important;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .sidebar {
+        width: 72px;
+        padding: 20px 8px;
+      }
+
+      .sidebar-brand,
+      .sidebar-nav-label {
+        display: none;
+      }
+
+      .sidebar-nav-item {
+        justify-content: center;
+      }
+    }
   </style>
 </head>
 <body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <div class="sidebar-brand">AION</div>
+    <nav class="sidebar-nav">
+      <button type="button" class="sidebar-nav-item" data-view="home">
+        <span class="sidebar-nav-icon" aria-hidden="true">⌂</span>
+        <span class="sidebar-nav-label">Home</span>
+      </button>
+      <button type="button" class="sidebar-nav-item" data-view="create">
+        <span class="sidebar-nav-icon" aria-hidden="true">✚</span>
+        <span class="sidebar-nav-label">Create</span>
+      </button>
+      <button type="button" class="sidebar-nav-item" data-view="albums">
+        <span class="sidebar-nav-icon" aria-hidden="true">◫</span>
+        <span class="sidebar-nav-label">Albums</span>
+      </button>
+      <button type="button" class="sidebar-nav-item" data-view="settings">
+        <span class="sidebar-nav-icon" aria-hidden="true">⚙</span>
+        <span class="sidebar-nav-label">Settings</span>
+      </button>
+    </nav>
+  </aside>
+
 <main>
-  <h1>AION Ambient Media Factory</h1>
-  <p class="subtitle">
-    Generate audio, metadata, artwork, video and a complete export package.
-  </p>
+
+<div id="view-settings" class="view hidden">
+  <h1>Settings</h1>
+  <section class="panel">
+    <h2>Settings — API Keys</h2>
+    <p class="subtitle">
+      Paste in a key and click Save — it takes effect immediately, no restart needed.
+      Leave anything blank that you don't have yet; the related feature just stays
+      unavailable until you add it later.
+    </p>
+
+    <div id="settings-secrets"></div>
+
+    <div class="actions">
+      <button type="button" id="youtube-connect-btn" class="secondary">
+        Connect YouTube channel
+      </button>
+      <span id="youtube-connect-status" class="status"></span>
+    </div>
+
+    <div id="youtube-connect-notice" class="notice hidden"></div>
+
+    <div id="youtube-playlist-reauth" class="actions hidden">
+      <button type="button" id="youtube-reauth-playlist-btn" class="secondary">
+        Re-authorize for playlist support
+      </button>
+      <span class="status">Needed for the Albums feature to create YouTube playlists.</span>
+    </div>
+
+    <div class="actions">
+      <span>Internet Archive publishing:</span>
+      <span id="internet-archive-status" class="status"></span>
+    </div>
+    <p class="subtitle">
+      Get a free access/secret key pair from
+      <a href="https://archive.org/account/s3.php" target="_blank" rel="noopener">archive.org/account/s3.php</a>
+      and paste both above — no OAuth connect step needed.
+    </p>
+  </section>
 
   <section class="panel">
-    <h2>1. Content Configuration</h2>
+    <h2>Sample Library — Import from Freesound</h2>
+    <p class="subtitle">
+      Search Freesound for CC0 (public domain) recordings and import one
+      into your sample library. Requires a Freesound API key above.
+    </p>
+
+    <div class="grid">
+      <label>
+        Search Freesound
+        <input id="freesound-query" placeholder="e.g. rain on window">
+      </label>
+      <label>
+        &nbsp;
+        <button type="button" id="freesound-search-btn" class="secondary">Search</button>
+      </label>
+    </div>
+
+    <div id="freesound-results"></div>
+    <div id="freesound-import-status" class="status"></div>
+  </section>
+</div>
+
+<div id="view-create" class="view hidden">
+  <h1>Create</h1>
+  <section class="panel">
+    <h2>Content Configuration</h2>
 
     <div class="grid">
       <label>
@@ -417,6 +985,7 @@
           <option value="isochronic_tones">Isochronic tones</option>
           <option value="mixed_ambient" selected>Mixed ambient</option>
           <option value="preset">Preset</option>
+          <option value="synthesizer">Synthesizer</option>
         </select>
       </label>
 
@@ -483,6 +1052,93 @@
         </select>
       </label>
 
+      <label id="synth-instrument-group" class="hidden">
+        Instrument
+        <select id="synth-instrument">
+          <option value="acoustic_grand_piano">Acoustic Grand Piano</option>
+          <option value="electric_piano">Electric Piano</option>
+          <option value="harpsichord">Harpsichord</option>
+          <option value="celesta">Celesta</option>
+          <option value="glockenspiel">Glockenspiel</option>
+          <option value="music_box">Music Box</option>
+          <option value="vibraphone">Vibraphone</option>
+          <option value="marimba">Marimba</option>
+          <option value="tubular_bells">Tubular Bells</option>
+          <option value="kalimba">Kalimba</option>
+          <option value="tinkle_bell">Tinkle Bell</option>
+          <option value="violin">Violin</option>
+          <option value="cello">Cello</option>
+          <option value="orchestral_harp">Orchestral Harp</option>
+          <option value="string_ensemble">String Ensemble</option>
+          <option value="synth_strings">Synth Strings</option>
+          <option value="choir_aahs">Choir Aahs</option>
+          <option value="voice_oohs">Voice Oohs</option>
+          <option value="flute">Flute</option>
+          <option value="pan_flute">Pan Flute</option>
+          <option value="warm_pad" selected>Warm Pad</option>
+          <option value="choir_pad">Choir Pad</option>
+          <option value="halo_pad">Halo Pad</option>
+          <option value="sweep_pad">Sweep Pad</option>
+          <option value="atmosphere_fx">Atmosphere</option>
+        </select>
+      </label>
+
+      <label id="synth-root-note-group" class="hidden">
+        Root note
+        <input id="synth-root-note" value="C4" maxlength="4">
+      </label>
+
+      <label id="synth-scale-group" class="hidden">
+        Scale
+        <select id="synth-scale">
+          <option value="major" selected>Major</option>
+          <option value="natural_minor">Natural minor</option>
+          <option value="major_pentatonic">Major pentatonic</option>
+          <option value="minor_pentatonic">Minor pentatonic</option>
+          <option value="dorian">Dorian</option>
+        </select>
+      </label>
+
+      <label id="synth-pattern-group" class="hidden">
+        Pattern
+        <select id="synth-pattern">
+          <option value="up" selected>Up</option>
+          <option value="down">Down</option>
+          <option value="up_down">Up / down</option>
+          <option value="random">Random</option>
+        </select>
+      </label>
+
+      <label id="synth-note-duration-group" class="hidden">
+        Note duration (seconds)
+        <input id="synth-note-duration" type="number" value="0.5" min="0.05" max="10" step="0.05">
+      </label>
+
+      <label id="synth-octave-range-group" class="hidden">
+        Octave range
+        <input id="synth-octave-range" type="number" value="2" min="1" max="4" step="1">
+      </label>
+
+      <label id="synth-attack-group" class="hidden">
+        Attack (seconds)
+        <input id="synth-attack" type="number" value="0.05" min="0" max="5" step="0.01">
+      </label>
+
+      <label id="synth-release-group" class="hidden">
+        Release (seconds)
+        <input id="synth-release" type="number" value="0.3" min="0" max="10" step="0.05">
+      </label>
+
+      <label id="synth-filter-cutoff-group" class="hidden">
+        Filter cutoff (brightness)
+        <input id="synth-filter-cutoff" type="number" value="0.8" min="0" max="1" step="0.01">
+      </label>
+
+      <label id="synth-filter-resonance-group" class="hidden">
+        Filter resonance
+        <input id="synth-filter-resonance" type="number" value="0.2" min="0" max="1" step="0.01">
+      </label>
+
       <label id="noise-group">
         Noise bed
         <select id="noise-mode">
@@ -503,6 +1159,16 @@
           <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="water"> Flowing water</label>
           <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="thunder"> Thunder</label>
           <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="chimes"> Wind chimes</label>
+          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="deep_waterfall"> Deep waterfall</label>
+          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="distant_thunder"> Distant thunder</label>
+          <label class="checkbox-label"><input type="checkbox" class="texture-checkbox" value="airplane_cabin"> Airplane cabin</label>
+        </div>
+      </div>
+
+      <div id="real-samples-group">
+        <span class="texture-group-title">Real recordings (select any combination)</span>
+        <div id="real-samples-checkboxes" class="texture-checkboxes">
+          <span class="library-empty">Loading...</span>
         </div>
       </div>
 
@@ -529,6 +1195,26 @@
           <option value="square-preview">Square preview</option>
         </select>
       </label>
+
+      <label>
+        Artwork style
+        <select id="artwork-provider">
+          <option value="procedural" selected>Procedural (free, instant)</option>
+          <option value="replicate">AI-generated (FLUX, ~$0.003/image via Replicate)</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="layer-volumes-panel" class="hidden">
+      <h3>Layer Volumes</h3>
+      <p class="subtitle" style="margin-bottom: 12px;">
+        Set how loud each sound is in the mix, then preview before generating the full track.
+      </p>
+      <div id="layer-volumes-list"></div>
+      <div class="actions" style="margin-top: 4px;">
+        <button type="button" id="preview-mix-btn" class="secondary">Preview mix</button>
+        <span id="preview-mix-status" class="status"></span>
+      </div>
     </div>
 
     <div class="artwork-preview-inline">
@@ -553,7 +1239,7 @@
   </section>
 
   <section class="panel">
-    <h2>2. Workflow Status</h2>
+    <h2>Workflow Status</h2>
 
     <div class="workflow-grid">
       <div id="step-audio" class="step">
@@ -586,7 +1272,7 @@
   </section>
 
   <section id="results" class="panel hidden">
-    <h2>3. Generated Assets</h2>
+    <h2>Generated Assets</h2>
 
     <div class="workflow-grid">
       <div>
@@ -623,9 +1309,62 @@
       <a id="export-download" class="download hidden" href="#">Download export ZIP</a>
     </div>
   </section>
+</div>
+
+<div id="view-albums" class="view hidden">
+  <h1>Albums</h1>
 
   <section class="panel">
-    <h2>4. Library</h2>
+    <h2>Generate a new album</h2>
+    <p class="subtitle">
+      Pick a concept and AION will pick 10 natural sound + melody + Hz +
+      noise combinations, quality-check each one, render 10 full 1-hour
+      tracks, and publish them to your connected YouTube channel as a
+      playlist -- paced automatically to stay within YouTube's daily
+      upload quota.
+    </p>
+
+    <div class="grid">
+      <label>
+        Concept
+        <select id="album-concept"></select>
+      </label>
+      <label>
+        Album title (optional)
+        <input id="album-title" placeholder="e.g. Deep Focus Vol. 1">
+      </label>
+    </div>
+
+    <div class="actions">
+      <button type="button" id="album-generate-btn">Generate Album</button>
+      <span id="album-generate-status" class="status"></span>
+    </div>
+
+    <div id="album-quota-widget" class="notice hidden"></div>
+  </section>
+
+  <section class="panel">
+    <h2>Your albums</h2>
+    <div class="actions">
+      <button type="button" id="album-refresh-btn" class="secondary">Refresh</button>
+    </div>
+    <div id="album-list"></div>
+  </section>
+
+  <section id="album-detail-panel" class="panel hidden">
+    <div class="actions">
+      <button type="button" id="album-detail-close-btn" class="secondary">&larr; Back to albums</button>
+    </div>
+    <h2 id="album-detail-title"></h2>
+    <p class="subtitle" id="album-detail-meta"></p>
+    <div id="album-detail-tracks"></div>
+  </section>
+</div>
+
+<div id="view-home" class="view">
+  <h1>Home</h1>
+  <section class="panel">
+    <h2>Library</h2>
     <p class="subtitle">
       Tracks generated through this page, with review status and playback.
       Approval here is what allows a track to be published.
@@ -633,14 +1372,21 @@
 
     <div class="actions">
       <button id="refresh-library" class="secondary">Refresh library</button>
+      <button id="bulk-delete-btn" class="warning hidden" type="button">Delete selected (0)</button>
       <span id="library-status" class="status"></span>
     </div>
 
-    <div id="library-list"></div>
+    <div id="library-list" class="library-grid"></div>
   </section>
+</div>
+
 </main>
+</div>
+
+<div id="album-toast-container" class="album-toast-container"></div>
 
 <div id="player-bar" class="player-bar hidden">
+  <div id="player-bar-cover" class="player-bar-cover"></div>
   <div class="player-bar-info">
     <span id="player-bar-title">—</span>
     <span id="player-bar-time" class="player-bar-time">0:00 / 0:00</span>
@@ -648,6 +1394,48 @@
   <button id="player-bar-toggle" type="button">▶</button>
   <input id="player-bar-seek" type="range" min="0" max="100" value="0">
   <audio id="global-player"></audio>
+</div>
+
+<div id="youtube-publish-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h2>Publish to YouTube</h2>
+    <p class="subtitle" id="youtube-publish-job-label"></p>
+
+    <label>
+      Video file
+      <select id="youtube-publish-video"></select>
+    </label>
+
+    <label>
+      Title
+      <input id="youtube-publish-title" maxlength="100">
+    </label>
+
+    <label>
+      Description
+      <textarea id="youtube-publish-description" rows="4"></textarea>
+    </label>
+
+    <label>
+      Tags (comma-separated)
+      <input id="youtube-publish-tags" placeholder="ambient, sleep, rain">
+    </label>
+
+    <label>
+      Privacy
+      <select id="youtube-publish-privacy">
+        <option value="private" selected>Private (only you can view)</option>
+        <option value="unlisted">Unlisted (anyone with the link)</option>
+        <option value="public">Public</option>
+      </select>
+    </label>
+
+    <div class="modal-actions">
+      <button type="button" id="youtube-publish-submit-btn">Publish</button>
+      <button type="button" id="youtube-publish-cancel-btn" class="secondary">Cancel</button>
+      <span id="youtube-publish-status" class="status"></span>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -671,10 +1459,269 @@
 
   const playerBar = document.getElementById("player-bar");
   const globalPlayer = document.getElementById("global-player");
+  const playerBarCover = document.getElementById("player-bar-cover");
   const playerBarTitle = document.getElementById("player-bar-title");
   const playerBarToggle = document.getElementById("player-bar-toggle");
   const playerBarSeek = document.getElementById("player-bar-seek");
   const playerBarTime = document.getElementById("player-bar-time");
+
+  const SECRET_LABELS = {
+    youtube_client_id: "YouTube Client ID",
+    youtube_client_secret: "YouTube Client Secret",
+    replicate_api_token: "Replicate API Token",
+    openrouter_api_key: "OpenRouter API Key",
+    freesound_api_key: "Freesound API Key",
+    internet_archive_access_key: "Internet Archive Access Key",
+    internet_archive_secret_key: "Internet Archive Secret Key"
+  };
+
+  const SECRET_BADGE_TEXT = {
+    database: "Saved",
+    environment: "Using .env",
+    unconfigured: "Not set"
+  };
+
+  function renderSecretRow(entry) {
+    const row = document.createElement("div");
+    row.className = "library-row";
+
+    const label = SECRET_LABELS[entry.key] || entry.key;
+    const badgeText = SECRET_BADGE_TEXT[entry.source] || entry.source;
+
+    row.innerHTML = `
+      <div class="library-row-header">
+        <span class="library-row-title">${escapeHtml(label)}</span>
+        <span class="badge badge-${escapeHtml(entry.source)}">${escapeHtml(badgeText)}</span>
+      </div>
+      <div class="secret-row-controls">
+        <input type="password" placeholder="Paste your ${escapeHtml(label)} here" autocomplete="off">
+        <button type="button" class="secret-save-btn">Save</button>
+        <button type="button" class="warning secret-clear-btn">Clear</button>
+      </div>
+    `;
+
+    const input = row.querySelector("input");
+    const saveButton = row.querySelector(".secret-save-btn");
+    const clearButton = row.querySelector(".secret-clear-btn");
+
+    saveButton.addEventListener("click", async () => {
+      const value = input.value.trim();
+
+      if (!value) {
+        return;
+      }
+
+      saveButton.disabled = true;
+
+      try {
+        await jsonRequest(`/api/v1/settings/secrets/${encodeURIComponent(entry.key)}`, {
+          method: "PUT",
+          body: JSON.stringify({ value })
+        });
+        input.value = "";
+        await loadSecretStatuses();
+      } catch (error) {
+        window.alert(`Could not save ${label}: ${error.message}`);
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+
+    clearButton.addEventListener("click", async () => {
+      clearButton.disabled = true;
+
+      try {
+        await jsonRequest(`/api/v1/settings/secrets/${encodeURIComponent(entry.key)}`, {
+          method: "DELETE"
+        });
+        await loadSecretStatuses();
+      } catch (error) {
+        window.alert(`Could not clear ${label}: ${error.message}`);
+      } finally {
+        clearButton.disabled = false;
+      }
+    });
+
+    return row;
+  }
+
+  async function loadSecretStatuses() {
+    const container = document.getElementById("settings-secrets");
+
+    try {
+      const { secrets } = await jsonRequest("/api/v1/settings/secrets");
+      container.innerHTML = "";
+
+      for (const entry of secrets) {
+        container.appendChild(renderSecretRow(entry));
+      }
+    } catch (error) {
+      container.innerHTML = '<p class="library-empty">Could not load settings.</p>';
+    }
+  }
+
+  async function searchFreesound() {
+    const query = document.getElementById("freesound-query").value.trim();
+    const resultsContainer = document.getElementById("freesound-results");
+    const statusElement = document.getElementById("freesound-import-status");
+
+    if (!query) {
+      return;
+    }
+
+    resultsContainer.innerHTML = "";
+    statusElement.textContent = "Searching...";
+
+    try {
+      const results = await jsonRequest(
+        `/api/v1/audio/samples/freesound/search?query=${encodeURIComponent(query)}`
+      );
+      statusElement.textContent = results.length
+        ? `${results.length} CC0 result(s).`
+        : "No CC0 results found.";
+
+      for (const result of results) {
+        resultsContainer.appendChild(renderFreesoundResult(result));
+      }
+    } catch (error) {
+      statusElement.textContent = `Search failed: ${error.message}`;
+    }
+  }
+
+  function renderFreesoundResult(result) {
+    const row = document.createElement("div");
+    row.className = "library-row";
+
+    row.innerHTML = `
+      <div class="library-row-header">
+        <span class="library-row-title">${escapeHtml(result.name)}</span>
+        <span class="badge">by ${escapeHtml(result.username)}</span>
+      </div>
+      <audio controls src="${escapeHtml(result.preview_url)}" style="width:100%"></audio>
+      <div class="secret-row-controls">
+        <input class="freesound-sample-id" placeholder="sample id (e.g. rain-window-01)" autocomplete="off">
+        <input class="freesound-category" placeholder="category (e.g. rain)" autocomplete="off">
+        <button type="button" class="freesound-import-btn">Import as CC0 sample</button>
+      </div>
+    `;
+
+    const importButton = row.querySelector(".freesound-import-btn");
+    importButton.addEventListener("click", async () => {
+      const sampleId = row.querySelector(".freesound-sample-id").value.trim();
+      const category = row.querySelector(".freesound-category").value.trim();
+      const statusElement = document.getElementById("freesound-import-status");
+
+      if (!sampleId || !category) {
+        statusElement.textContent = "Sample id and category are both required.";
+        return;
+      }
+
+      importButton.disabled = true;
+      const originalButtonText = importButton.textContent;
+      importButton.textContent = "Importing…";
+      // Downloading + decoding a real audio file can take anywhere from a
+      // few seconds to over a minute depending on the recording's length
+      // and your connection speed to Freesound's CDN -- without this,
+      // the only visible change during that wait is the button going
+      // disabled, which reads as frozen rather than working.
+      statusElement.textContent =
+        "Importing… this can take up to a minute or more for longer recordings.";
+
+      try {
+        await jsonRequest("/api/v1/audio/samples/import-from-freesound", {
+          method: "POST",
+          body: JSON.stringify({
+            freesound_id: result.freesound_id,
+            sample_id: sampleId,
+            label: result.name,
+            category
+          })
+        });
+        statusElement.textContent = `Imported "${result.name}" as ${sampleId}.`;
+        importButton.textContent = "Imported";
+        loadRealSamples();
+      } catch (error) {
+        statusElement.textContent = `Import failed: ${error.message}`;
+        importButton.textContent = originalButtonText;
+        importButton.disabled = false;
+      }
+    });
+
+    return row;
+  }
+
+  document.getElementById("freesound-search-btn").addEventListener("click", searchFreesound);
+
+  async function refreshInternetArchiveStatus() {
+    const statusElement = document.getElementById("internet-archive-status");
+
+    try {
+      const status = await jsonRequest("/api/v1/publishing/internet-archive/status");
+      statusElement.textContent = status.configured ? "Configured" : "Not configured";
+    } catch (error) {
+      statusElement.textContent = "";
+    }
+  }
+
+  async function refreshYouTubeConnectionStatus() {
+    const statusElement = document.getElementById("youtube-connect-status");
+    const reauthPanel = document.getElementById("youtube-playlist-reauth");
+
+    try {
+      const status = await jsonRequest("/api/v1/publishing/youtube/status");
+      statusElement.textContent = status.connected
+        ? `Connected: ${status.channel_title || status.channel_id}`
+        : "Not connected";
+      // Google's incremental authorization means clicking through the
+      // same connect flow again upgrades an existing connection's scope
+      // without disconnecting it -- so this only needs to be shown, not
+      // wired to a different endpoint.
+      reauthPanel.classList.toggle("hidden", !status.connected || status.has_playlist_scope);
+    } catch (error) {
+      statusElement.textContent = "";
+    }
+  }
+
+  async function connectYouTube() {
+    const buttons = [
+      document.getElementById("youtube-connect-btn"),
+      document.getElementById("youtube-reauth-playlist-btn")
+    ];
+    buttons.forEach((button) => { button.disabled = true; });
+
+    try {
+      const result = await jsonRequest("/api/v1/publishing/youtube/authorize");
+      window.location.href = result.authorization_url;
+    } catch (error) {
+      window.alert(`Could not start YouTube connection: ${error.message}`);
+      buttons.forEach((button) => { button.disabled = false; });
+    }
+  }
+
+  document.getElementById("youtube-connect-btn").addEventListener("click", connectYouTube);
+  document.getElementById("youtube-reauth-playlist-btn").addEventListener("click", connectYouTube);
+
+  function showYouTubeConnectNotice() {
+    const params = new URLSearchParams(window.location.search);
+    const connectResult = params.get("youtube_connect");
+
+    if (!connectResult) {
+      return;
+    }
+
+    const notice = document.getElementById("youtube-connect-notice");
+    notice.classList.remove("hidden");
+
+    if (connectResult === "success") {
+      notice.textContent = "YouTube channel connected successfully.";
+    } else {
+      const reason = params.get("reason") || "unknown error";
+      notice.textContent = `YouTube connection failed: ${reason}`;
+    }
+
+    // Clean the query string so the notice doesn't reappear on refresh.
+    window.history.replaceState({}, "", window.location.pathname);
+  }
 
   function formatTime(seconds) {
     if (!Number.isFinite(seconds)) {
@@ -692,6 +1739,7 @@
   // interrupting any track currently playing in it).
   function playTrack(filename, title) {
     globalPlayer.src = `/api/v1/audio/files/${encodeURIComponent(filename)}`;
+    playerBarCover.style.background = coverGradientFor(title);
     playerBarTitle.textContent = title;
     playerBar.classList.remove("hidden");
     document.body.classList.add("has-player");
@@ -740,12 +1788,92 @@
     element.querySelector(".status").textContent = text;
   }
 
+  // Percentage (0-100) per mix layer, keyed by "noise", "tone", or
+  // "texture:<type>". Persists across re-renders so toggling a texture
+  // off and back on (or switching mode away and back) remembers the
+  // value you set rather than resetting it.
+  const layerVolumes = new Map();
+
+  function computeLayerEntries() {
+    const mode = modeElement.value;
+    const entries = [];
+
+    if (mode === "mixed_ambient") {
+      const noiseSelect = document.getElementById("noise-mode");
+      const noiseLabel = noiseSelect.options[noiseSelect.selectedIndex].textContent;
+      entries.push({ key: "noise", label: noiseLabel, min: 1, defaultPercent: 70 });
+
+      const freq = document.getElementById("frequency").value;
+      entries.push({ key: "tone", label: `${freq} Hz tone`, min: 1, defaultPercent: 20 });
+    }
+
+    document.querySelectorAll(".texture-checkbox:checked").forEach((checkbox) => {
+      const label = checkbox.closest(".checkbox-label").textContent.trim();
+      entries.push({ key: `texture:${checkbox.value}`, label, min: 0, defaultPercent: 20 });
+    });
+
+    if (mode === "mixed_ambient") {
+      document.querySelectorAll(".sample-checkbox:checked").forEach((checkbox) => {
+        const label = checkbox.closest(".checkbox-label").textContent.trim();
+        entries.push({ key: `sample:${checkbox.value}`, label, min: 0, defaultPercent: 30 });
+      });
+    }
+
+    return entries;
+  }
+
+  function renderLayerVolumes() {
+    const entries = computeLayerEntries();
+    const panel = document.getElementById("layer-volumes-panel");
+    const list = document.getElementById("layer-volumes-list");
+
+    panel.classList.toggle("hidden", entries.length === 0);
+
+    const activeKeys = new Set(entries.map((entry) => entry.key));
+    for (const key of Array.from(layerVolumes.keys())) {
+      if (!activeKeys.has(key)) {
+        layerVolumes.delete(key);
+      }
+    }
+
+    list.innerHTML = "";
+
+    for (const entry of entries) {
+      if (!layerVolumes.has(entry.key)) {
+        layerVolumes.set(entry.key, entry.defaultPercent);
+      }
+
+      const percent = layerVolumes.get(entry.key);
+      const row = document.createElement("div");
+      row.className = "layer-volume-row";
+      row.innerHTML = `
+        <div class="layer-volume-label">
+          <span>${escapeHtml(entry.label)}</span>
+          <span class="layer-volume-percent">${percent}%</span>
+        </div>
+        <input type="range" min="${entry.min}" max="100" value="${percent}" class="layer-volume-slider">
+      `;
+
+      const slider = row.querySelector(".layer-volume-slider");
+      const percentLabel = row.querySelector(".layer-volume-percent");
+
+      slider.addEventListener("input", () => {
+        const value = Number(slider.value);
+        layerVolumes.set(entry.key, value);
+        percentLabel.textContent = `${value}%`;
+      });
+
+      list.appendChild(row);
+    }
+  }
+
   function updateConditionalFields() {
     const mode = modeElement.value;
     const binaural = mode === "binaural_beats";
     const isochronic = mode === "isochronic_tones";
     const preset = mode === "preset";
     const mixed = mode === "mixed_ambient";
+    const synth = mode === "synthesizer";
 
     document.getElementById("left-frequency-group").classList.toggle("hidden", !binaural);
     document.getElementById("right-frequency-group").classList.toggle("hidden", !binaural);
@@ -754,10 +1882,22 @@
     document.getElementById("noise-group").classList.toggle("hidden", !mixed);
     // Textures layer onto any mode, not just mixed_ambient, so this group
     // stays visible regardless of the selected mode.
+    // Real recordings are a "sample" kind ambient_layers entry, which
+    // (unlike textures) only the mixed_ambient generator branch reads.
+    document.getElementById("real-samples-group").classList.toggle("hidden", !mixed);
+
+    for (const id of [
+      "synth-instrument-group", "synth-root-note-group", "synth-scale-group",
+      "synth-pattern-group", "synth-note-duration-group", "synth-octave-range-group",
+      "synth-attack-group", "synth-release-group", "synth-filter-cutoff-group",
+      "synth-filter-resonance-group"
+    ]) {
+      document.getElementById(id).classList.toggle("hidden", !synth);
+    }
 
     document.getElementById("frequency-group").classList.toggle(
       "hidden",
-      ["white_noise", "pink_noise", "brown_noise", "preset", "binaural_beats"].includes(mode)
+      ["white_noise", "pink_noise", "brown_noise", "preset", "binaural_beats", "synthesizer"].includes(mode)
     );
 
     if (binaural) {
@@ -766,6 +1906,8 @@
     } else {
       channelsElement.disabled = false;
     }
+
+    renderLayerVolumes();
   }
 
   async function jsonRequest(url, options = {}) {
@@ -804,6 +1946,31 @@
     }
   }
 
+  async function loadRealSamples() {
+    const container = document.getElementById("real-samples-checkboxes");
+
+    try {
+      const samples = await jsonRequest("/api/v1/audio/samples");
+      const available = samples.filter((sample) => sample.available);
+
+      if (available.length === 0) {
+        container.innerHTML = '<span class="library-empty">None imported yet -- use Settings to import CC0 recordings from Freesound.</span>';
+        return;
+      }
+
+      container.innerHTML = "";
+      for (const sample of available) {
+        const label = document.createElement("label");
+        label.className = "checkbox-label";
+        label.innerHTML = `<input type="checkbox" class="sample-checkbox" value="${escapeHtml(sample.id)}"> ${escapeHtml(sample.label)}`;
+        label.querySelector(".sample-checkbox").addEventListener("change", renderLayerVolumes);
+        container.appendChild(label);
+      }
+    } catch {
+      container.innerHTML = '<span class="library-empty">Could not load real recordings.</span>';
+    }
+  }
+
   function buildAudioPayload() {
     const mode = modeElement.value;
 
@@ -839,32 +2006,68 @@
       payload.preset_name = document.getElementById("preset").value;
     }
 
+    if (mode === "synthesizer") {
+      payload.synth_instrument = document.getElementById("synth-instrument").value;
+      payload.synth_root_note = document.getElementById("synth-root-note").value;
+      payload.synth_scale = document.getElementById("synth-scale").value;
+      payload.synth_pattern = document.getElementById("synth-pattern").value;
+      payload.synth_note_duration_seconds = Number(document.getElementById("synth-note-duration").value);
+      payload.synth_octave_range = Number(document.getElementById("synth-octave-range").value);
+      payload.synth_attack_seconds = Number(document.getElementById("synth-attack").value);
+      payload.synth_release_seconds = Number(document.getElementById("synth-release").value);
+      payload.synth_filter_cutoff = Number(document.getElementById("synth-filter-cutoff").value);
+      payload.synth_filter_resonance = Number(document.getElementById("synth-filter-resonance").value);
+    }
+
     if (mode === "mixed_ambient") {
       payload.ambient_layers = [
         {
           kind: "noise",
           noise_type: document.getElementById("noise-mode").value,
-          gain: 0.7
+          gain: (layerVolumes.get("noise") ?? 70) / 100
         },
         {
           kind: "tone",
           frequency_hz: Number(document.getElementById("frequency").value),
-          gain: 0.2
+          gain: (layerVolumes.get("tone") ?? 20) / 100
         }
       ];
+
+      // Real recordings imported from Freesound, layered in as "sample"
+      // kind entries alongside the synthesized noise/tone beds above. A
+      // sample dragged to 0% is left out entirely, same reasoning as
+      // textures below (the backend requires gain > 0).
+      const sampleIds = Array.from(
+        document.querySelectorAll(".sample-checkbox:checked")
+      ).map((checkbox) => checkbox.value);
+
+      const sampleLayers = sampleIds
+        .map((sampleId) => ({
+          kind: "sample",
+          sample_id: sampleId,
+          gain: (layerVolumes.get(`sample:${sampleId}`) ?? 30) / 100
+        }))
+        .filter((layer) => layer.gain > 0);
+
+      payload.ambient_layers.push(...sampleLayers);
     }
 
     // Textures layer onto any mode's primary signal, not just
-    // mixed_ambient, so this reads the checkboxes unconditionally.
+    // mixed_ambient, so this reads the checkboxes unconditionally. A
+    // texture dragged to 0% is left out of the request entirely rather
+    // than sent with gain=0 -- the backend requires gain > 0, and "0%"
+    // reads more naturally as "don't include this" anyway.
     const textureValues = Array.from(
       document.querySelectorAll(".texture-checkbox:checked")
     ).map((checkbox) => checkbox.value);
 
     if (textureValues.length > 0) {
-      payload.textures = textureValues.map((textureValue) => ({
-        texture_type: textureValue,
-        gain: 0.2
-      }));
+      payload.textures = textureValues
+        .map((textureValue) => ({
+          texture_type: textureValue,
+          gain: (layerVolumes.get(`texture:${textureValue}`) ?? 20) / 100
+        }))
+        .filter((texture) => texture.gain > 0);
     }
 
     return payload;
@@ -991,6 +2194,70 @@
     step("metadata", "Completed", "complete");
   }
 
+  // Preview length is capped so auditioning a mix doesn't mean waiting
+  // for (or listening to) the full requested duration -- up to 8 hours
+  // for a long ambient track. Uses the plain /audio/generate endpoint
+  // (not generate-and-catalog), so repeated preview clicks while dialing
+  // in volumes don't spam the Library with throwaway entries.
+  const PREVIEW_DURATION_SECONDS = 20;
+
+  async function previewMix() {
+    const button = document.getElementById("preview-mix-btn");
+    const previewStatus = document.getElementById("preview-mix-status");
+    button.disabled = true;
+    previewStatus.textContent = "Generating preview…";
+
+    try {
+      const payload = buildAudioPayload();
+      payload.duration_seconds = Math.min(payload.duration_seconds, PREVIEW_DURATION_SECONDS);
+
+      const result = await jsonRequest("/api/v1/audio/generate", {
+        method: "POST",
+        body: JSON.stringify(payload)
+      });
+
+      playTrack(result.filename, `Preview: ${payload.title || "Mix"}`);
+      previewStatus.textContent = "Playing preview — adjust and click again to hear changes.";
+    } catch (error) {
+      previewStatus.textContent = "Preview failed.";
+      window.alert(`Could not generate preview: ${error.message}`);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  document.getElementById("preview-mix-btn").addEventListener("click", previewMix);
+
+  // Builds an AI artwork prompt that reflects whichever natural sounds
+  // (synthesized textures and/or real Freesound recordings) are actually
+  // selected, so the cover art visually matches what the track sounds
+  // like rather than being generic. Returns null when nothing is
+  // selected, so callers fall back to the backend's own generic default
+  // prompt instead of sending an empty/meaningless style description.
+  function buildNaturalSoundStylePrompt(title, subtitle) {
+    const checkedLabels = (selector) =>
+      Array.from(document.querySelectorAll(selector)).map((checkbox) =>
+        checkbox.closest(".checkbox-label").textContent.trim()
+      );
+
+    const elements = [
+      ...checkedLabels(".texture-checkbox:checked"),
+      ...checkedLabels(".sample-checkbox:checked")
+    ];
+
+    if (elements.length === 0) {
+      return null;
+    }
+
+    return (
+      `Photorealistic, high-detail album cover artwork for a therapeutic ` +
+      `ambient audio track titled '${title}' (${subtitle}). Visually evoke ` +
+      `and depict a scene featuring: ${elements.join(", ")}. Calm, soothing, ` +
+      `cinematic lighting, natural scenery matching these elements, no text ` +
+      `or typography in the image.`
+    );
+  }
+
   async function previewArtwork() {
     const button = document.getElementById("preview-artwork-btn");
     const previewStatus = document.getElementById("artwork-preview-status");
@@ -999,15 +2266,20 @@
 
     try {
       const seed = Math.floor(Math.random() * 1000000);
+      const title = document.getElementById("title").value;
+      const subtitle = "Original Ambient Audio";
+      const provider = document.getElementById("artwork-provider").value;
 
       const result = await jsonRequest(
         "/api/v1/visuals/artwork/generate",
         {
           method: "POST",
           body: JSON.stringify({
-            title: document.getElementById("title").value,
-            subtitle: "Original Ambient Audio",
+            title,
+            subtitle,
             preset_name: document.getElementById("artwork-preset").value,
+            provider,
+            style_prompt: provider === "procedural" ? null : buildNaturalSoundStylePrompt(title, subtitle),
             seed
           })
         }
@@ -1031,14 +2303,20 @@
   async function generateArtwork() {
     step("artwork", "Generating…");
 
+    const title = state.metadata?.title || document.getElementById("title").value;
+    const subtitle = state.metadata?.subtitle || "Original Ambient Audio";
+    const provider = document.getElementById("artwork-provider").value;
+
     state.artwork = await jsonRequest(
       "/api/v1/visuals/artwork/generate",
       {
         method: "POST",
         body: JSON.stringify({
-          title: state.metadata?.title || document.getElementById("title").value,
-          subtitle: state.metadata?.subtitle || "Original Ambient Audio",
+          title,
+          subtitle,
           preset_name: document.getElementById("artwork-preset").value,
+          provider,
+          style_prompt: provider === "procedural" ? null : buildNaturalSoundStylePrompt(title, subtitle),
           seed: previewedArtworkSeed ?? Number(document.getElementById("seed").value)
         })
       }
@@ -1174,31 +2452,67 @@
     return div.innerHTML;
   }
 
+  // A simple deterministic string hash (djb2-style) -- same input always
+  // produces the same hash, so a given track's placeholder cover looks
+  // identical across re-renders instead of changing randomly.
+  function hashStringToInt(value) {
+    let hash = 5381;
+
+    for (let i = 0; i < value.length; i += 1) {
+      hash = ((hash << 5) + hash + value.charCodeAt(i)) | 0;
+    }
+
+    return Math.abs(hash);
+  }
+
+  function coverGradientFor(seedSource) {
+    const hash = hashStringToInt(String(seedSource));
+    const hue1 = hash % 360;
+    const hue2 = (hue1 + 40 + ((hash >> 8) % 80)) % 360;
+    return `linear-gradient(135deg, hsl(${hue1} 65% 45%), hsl(${hue2} 55% 25%))`;
+  }
+
+  // Selection is cleared on every full loadLibrary() re-render (see
+  // below) rather than preserved across re-renders -- after a delete the
+  // selected items are gone anyway, and this keeps the state simple.
+  const selectedJobIds = new Set();
+
+  function updateBulkDeleteButton() {
+    const button = document.getElementById("bulk-delete-btn");
+    button.textContent = `Delete selected (${selectedJobIds.size})`;
+    button.classList.toggle("hidden", selectedJobIds.size === 0);
+  }
+
   function renderLibraryRow(job) {
-    const row = document.createElement("div");
-    row.className = "library-row";
+    const card = document.createElement("div");
+    card.className = "library-card";
 
     const statusBadge = `<span class="badge badge-${escapeHtml(job.status)}">${escapeHtml(job.status)}</span>`;
     const reviewBadge = `<span class="badge badge-${escapeHtml(job.review_status)}">${escapeHtml(job.review_status)}</span>`;
 
     const canReview = job.status === "completed" && job.review_status === "pending";
+    const canPublish = job.status === "completed" && job.review_status === "approved";
+    const cover = coverGradientFor(job.id || job.title);
 
-    row.innerHTML = `
-      <div class="library-row-header">
-        <span class="library-row-title">${escapeHtml(job.title)}</span>
-        <span>${statusBadge} ${reviewBadge}</span>
+    card.innerHTML = `
+      <div class="library-card-cover" style="background: ${cover};">
+        <input type="checkbox" class="library-card-select" data-job-id="${escapeHtml(job.id)}" aria-label="Select ${escapeHtml(job.title)}">
+        ${job.filename ? `<button type="button" class="play-btn library-card-play" data-filename="${escapeHtml(job.filename)}" data-title="${escapeHtml(job.title)}">▶</button>` : ""}
       </div>
-      <div class="library-row-meta">
+      <div class="library-card-title">${escapeHtml(job.title)}</div>
+      <div class="library-card-meta">
         ${escapeHtml(job.mode)} · ${formatDuration(job.duration_seconds)} · ${escapeHtml(job.channels)}
       </div>
-      <div class="library-row-actions">
-        ${job.filename ? `<button type="button" class="play-btn" data-filename="${escapeHtml(job.filename)}" data-title="${escapeHtml(job.title)}">▶ Play</button>` : ""}
+      <div class="library-card-badges">${statusBadge} ${reviewBadge}</div>
+      <div class="library-card-actions">
         ${canReview ? `<button type="button" class="approve-btn" data-job-id="${escapeHtml(job.id)}">Approve</button>` : ""}
         ${canReview ? `<button type="button" class="warning reject-btn" data-job-id="${escapeHtml(job.id)}">Reject</button>` : ""}
+        ${canPublish ? `<button type="button" class="publish-youtube-btn" data-job-id="${escapeHtml(job.id)}" data-job-title="${escapeHtml(job.title)}">Publish to YouTube</button>` : ""}
+        <button type="button" class="delete-btn library-card-delete" data-job-id="${escapeHtml(job.id)}">Delete</button>
       </div>
     `;
 
-    return row;
+    return card;
   }
 
   async function reviewJob(jobId, decision) {
@@ -1212,10 +2526,140 @@
     await loadLibrary();
   }
 
+  let youtubePublishJobId = null;
+
+  async function openYoutubePublishModal(jobId, jobTitle) {
+    youtubePublishJobId = jobId;
+
+    const modal = document.getElementById("youtube-publish-modal");
+    const label = document.getElementById("youtube-publish-job-label");
+    const videoSelect = document.getElementById("youtube-publish-video");
+    const statusElement = document.getElementById("youtube-publish-status");
+
+    label.textContent = `Publishing: ${jobTitle}`;
+    document.getElementById("youtube-publish-title").value = jobTitle;
+    document.getElementById("youtube-publish-description").value = "";
+    document.getElementById("youtube-publish-tags").value = "";
+    statusElement.textContent = "";
+    videoSelect.innerHTML = '<option value="">Loading videos…</option>';
+    modal.classList.remove("hidden");
+
+    try {
+      const videos = await jsonRequest("/api/v1/exports/videos");
+
+      if (videos.length === 0) {
+        videoSelect.innerHTML = '<option value="">No rendered videos found</option>';
+        return;
+      }
+
+      videoSelect.innerHTML = videos
+        .map((video) => `<option value="${escapeHtml(video.filename)}">${escapeHtml(video.filename)}</option>`)
+        .join("");
+    } catch (error) {
+      videoSelect.innerHTML = '<option value="">Could not load videos</option>';
+    }
+  }
+
+  function closeYoutubePublishModal() {
+    document.getElementById("youtube-publish-modal").classList.add("hidden");
+    youtubePublishJobId = null;
+  }
+
+  document.getElementById("youtube-publish-cancel-btn").addEventListener("click", closeYoutubePublishModal);
+
+  document.getElementById("youtube-publish-submit-btn").addEventListener("click", async () => {
+    const statusElement = document.getElementById("youtube-publish-status");
+    const videoFilename = document.getElementById("youtube-publish-video").value;
+    const title = document.getElementById("youtube-publish-title").value.trim();
+
+    if (!videoFilename) {
+      statusElement.textContent = "Choose a video file first.";
+      return;
+    }
+    if (!title) {
+      statusElement.textContent = "Title is required.";
+      return;
+    }
+
+    const tags = document.getElementById("youtube-publish-tags").value
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag.length > 0);
+
+    const submitButton = document.getElementById("youtube-publish-submit-btn");
+    submitButton.disabled = true;
+    statusElement.textContent = "Uploading… this can take a while for longer videos.";
+
+    try {
+      const result = await jsonRequest("/api/v1/publishing/youtube/uploads", {
+        method: "POST",
+        body: JSON.stringify({
+          audio_job_id: youtubePublishJobId,
+          video_filename: videoFilename,
+          title,
+          description: document.getElementById("youtube-publish-description").value,
+          tags,
+          privacy_status: document.getElementById("youtube-publish-privacy").value
+        })
+      });
+
+      statusElement.innerHTML = `Published: <a href="${escapeHtml(result.youtube_url)}" target="_blank" rel="noopener">${escapeHtml(result.youtube_url)}</a>`;
+    } catch (error) {
+      statusElement.textContent = `Upload failed: ${error.message}`;
+    } finally {
+      submitButton.disabled = false;
+    }
+  });
+
+  async function deleteJob(jobId) {
+    if (!window.confirm("Delete this track? This can't be undone.")) {
+      return;
+    }
+
+    try {
+      await jsonRequest(`/api/v1/audio/jobs/${jobId}`, { method: "DELETE" });
+      selectedJobIds.delete(jobId);
+      await loadLibrary();
+    } catch (error) {
+      window.alert(`Could not delete track: ${error.message}`);
+    }
+  }
+
+  async function bulkDeleteSelected() {
+    if (selectedJobIds.size === 0) {
+      return;
+    }
+
+    const count = selectedJobIds.size;
+    if (!window.confirm(`Delete ${count} selected track${count === 1 ? "" : "s"}? This can't be undone.`)) {
+      return;
+    }
+
+    const button = document.getElementById("bulk-delete-btn");
+    button.disabled = true;
+
+    try {
+      await jsonRequest("/api/v1/audio/jobs/bulk-delete", {
+        method: "POST",
+        body: JSON.stringify({ job_ids: Array.from(selectedJobIds) })
+      });
+      selectedJobIds.clear();
+      await loadLibrary();
+    } catch (error) {
+      window.alert(`Could not delete tracks: ${error.message}`);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  document.getElementById("bulk-delete-btn").addEventListener("click", bulkDeleteSelected);
+
   async function loadLibrary() {
     const libraryStatus = document.getElementById("library-status");
     const list = document.getElementById("library-list");
     libraryStatus.textContent = "Loading…";
+    selectedJobIds.clear();
+    updateBulkDeleteButton();
 
     try {
       const jobs = await jsonRequest("/api/v1/audio/jobs?limit=50");
@@ -1239,6 +2683,33 @@
         list.querySelectorAll(".reject-btn").forEach((button) => {
           button.addEventListener("click", () => reviewJob(button.dataset.jobId, "reject"));
         });
+
+        list.querySelectorAll(".publish-youtube-btn").forEach((button) => {
+          button.addEventListener("click", () =>
+            openYoutubePublishModal(button.dataset.jobId, button.dataset.jobTitle)
+          );
+        });
+
+        list.querySelectorAll(".delete-btn").forEach((button) => {
+          button.addEventListener("click", () => deleteJob(button.dataset.jobId));
+        });
+
+        list.querySelectorAll(".library-card-select").forEach((checkbox) => {
+          checkbox.addEventListener("click", (event) => event.stopPropagation());
+          checkbox.addEventListener("change", () => {
+            const jobId = checkbox.dataset.jobId;
+            const card = checkbox.closest(".library-card");
+
+            if (checkbox.checked) {
+              selectedJobIds.add(jobId);
+            } else {
+              selectedJobIds.delete(jobId);
+            }
+
+            card.classList.toggle("selected", checkbox.checked);
+            updateBulkDeleteButton();
+          });
+        });
       }
 
       libraryStatus.textContent = "";
@@ -1249,10 +2720,376 @@
 
   document.getElementById("refresh-library").addEventListener("click", loadLibrary);
 
+  // Coarser than the fine-grained per-status badges elsewhere -- an album
+  // track only needs to signal "not started / in progress / done / failed"
+  // at a glance, so several pipeline stages share one visual bucket.
+  const ALBUM_TRACK_BADGE_CLASS = {
+    pending: "badge-pending",
+    harmony_passed: "badge-queued",
+    audio_rendered: "badge-processing",
+    video_rendered: "badge-processing",
+    uploaded: "badge-completed",
+    playlist_added: "badge-approved",
+    failed: "badge-failed"
+  };
+
+  const ALBUM_BATCH_BADGE_CLASS = {
+    draft: "badge-pending",
+    generating: "badge-queued",
+    uploading: "badge-processing",
+    completed: "badge-approved",
+    completed_with_errors: "badge-rejected",
+    cancelled: "badge-failed"
+  };
+
+  const ALBUM_TRACK_STATUS_ORDER = [
+    "playlist_added", "uploaded", "video_rendered", "audio_rendered", "harmony_passed", "pending", "failed"
+  ];
+
+  // Ordered pipeline stages used for progress-bar fill percentage. "failed"
+  // isn't a stage on this ladder -- it's rendered as a full red bar instead
+  // (see albumTrackProgressPercent), since a failed track stopped at
+  // whatever stage it was on, which this summary-level view doesn't track.
+  const ALBUM_STAGE_INDEX = {
+    pending: 0,
+    harmony_passed: 1,
+    audio_rendered: 2,
+    video_rendered: 3,
+    uploaded: 4,
+    playlist_added: 5
+  };
+  const ALBUM_STAGE_COUNT = 5;
+
+  const ALBUM_TRACK_STAGE_LABEL = {
+    pending: "queued",
+    harmony_passed: "passed the quality check",
+    audio_rendered: "audio rendered",
+    video_rendered: "video rendered",
+    uploaded: "uploaded to YouTube",
+    playlist_added: "added to the playlist — done",
+    failed: "failed"
+  };
+
+  const ALBUM_BATCH_STAGE_LABEL = {
+    generating: "generating tracks",
+    uploading: "uploading to YouTube",
+    completed: "completed — every track is live",
+    completed_with_errors: "completed with some errors",
+    cancelled: "cancelled"
+  };
+
+  // Polls the currently visible album(s) for status changes so progress
+  // bars fill and toasts fire without the user having to click Refresh.
+  let albumPollTimer = null;
+  const ALBUM_POLL_INTERVAL_MS = 6000;
+  let currentAlbumDetailId = null;
+
+  // Remembers each batch/track's last-seen status so a poll tick can tell
+  // "still pending" apart from "just changed" -- only the latter is worth a
+  // toast. A track/batch's first-ever sighting is cached silently (no
+  // previous value to compare against), so opening a page never spams
+  // toasts for stages that finished before the page was loaded.
+  const albumBatchStatusCache = new Map();
+  const albumTrackStatusCache = new Map();
+
+  function noteBatchStatusChange(album) {
+    const previous = albumBatchStatusCache.get(album.id);
+    albumBatchStatusCache.set(album.id, album.status);
+    return previous !== undefined && previous !== album.status ? { from: previous, to: album.status } : null;
+  }
+
+  function noteTrackStatusChange(track) {
+    const previous = albumTrackStatusCache.get(track.id);
+    albumTrackStatusCache.set(track.id, track.status);
+    return previous !== undefined && previous !== track.status ? { from: previous, to: track.status } : null;
+  }
+
+  function showAlbumToast(message, variant) {
+    const container = document.getElementById("album-toast-container");
+    const toast = document.createElement("div");
+    toast.className = variant ? `album-toast ${variant}` : "album-toast";
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 7000);
+  }
+
+  function albumTrackProgressPercent(status) {
+    if (status === "failed") {
+      return 100;
+    }
+    return Math.round(((ALBUM_STAGE_INDEX[status] ?? 0) / ALBUM_STAGE_COUNT) * 100);
+  }
+
+  function albumOverallProgressPercent(trackSummary) {
+    let weightedTotal = 0;
+    let trackCount = 0;
+
+    for (const [status, count] of Object.entries(trackSummary)) {
+      trackCount += count;
+      weightedTotal += albumTrackProgressPercent(status) * count;
+    }
+
+    return trackCount ? Math.round(weightedTotal / trackCount) : 0;
+  }
+
+  function renderAlbumProgressBar(status) {
+    const pct = albumTrackProgressPercent(status);
+    return `
+      <div class="album-progress-bar">
+        <div class="album-progress-bar-fill status-${escapeHtml(status)}" style="width:${pct}%"></div>
+      </div>
+    `;
+  }
+
+  async function loadAlbumConcepts() {
+    const select = document.getElementById("album-concept");
+
+    try {
+      const concepts = await jsonRequest("/api/v1/albums/concepts");
+      select.innerHTML = concepts
+        .map((concept) => `<option value="${escapeHtml(concept.id)}">${escapeHtml(concept.label)}</option>`)
+        .join("");
+    } catch (error) {
+      select.innerHTML = "<option value=\"\">Failed to load concepts</option>";
+    }
+  }
+
+  function renderAlbumTrackSummaryGrid(trackSummary) {
+    const cells = [];
+
+    for (const status of ALBUM_TRACK_STATUS_ORDER) {
+      const count = trackSummary[status] || 0;
+      for (let i = 0; i < count; i += 1) {
+        cells.push(status);
+      }
+    }
+
+    return cells
+      .map((status) => `<div class="album-track-cell status-${escapeHtml(status)}" title="${escapeHtml(status)}"></div>`)
+      .join("");
+  }
+
+  async function loadAlbums() {
+    const list = document.getElementById("album-list");
+
+    try {
+      const albums = await jsonRequest("/api/v1/albums");
+
+      if (albums.length === 0) {
+        list.innerHTML = "<p class=\"subtitle\">No albums yet -- generate one above.</p>";
+        return;
+      }
+
+      list.innerHTML = "";
+
+      albums.forEach((album) => {
+        const change = noteBatchStatusChange(album);
+        if (change) {
+          const label = ALBUM_BATCH_STAGE_LABEL[change.to] || change.to;
+          const variant = change.to === "completed" ? "success" : change.to === "completed_with_errors" ? "error" : "";
+          showAlbumToast(`Album "${album.title}": ${label}.`, variant);
+        }
+
+        const card = document.createElement("div");
+        card.className = "album-card";
+        const badgeClass = ALBUM_BATCH_BADGE_CLASS[album.status] || "badge-pending";
+        const overallPct = albumOverallProgressPercent(album.track_summary);
+        const doneCount = album.track_summary.playlist_added || 0;
+        card.innerHTML = `
+          <div class="album-card-header">
+            <span class="album-card-title">${escapeHtml(album.title)}</span>
+            <span class="badge ${badgeClass}">${escapeHtml(album.status)}</span>
+          </div>
+          <div class="album-progress-bar">
+            <div class="album-progress-bar-fill" style="width:${overallPct}%"></div>
+          </div>
+          <div class="album-progress-label">${overallPct}% complete · ${doneCount}/10 tracks live</div>
+          <div class="album-track-grid">${renderAlbumTrackSummaryGrid(album.track_summary)}</div>
+        `;
+        card.addEventListener("click", () => openAlbumDetail(album.id));
+        list.appendChild(card);
+      });
+    } catch (error) {
+      list.innerHTML = "<p class=\"status\">Failed to load albums.</p>";
+    }
+  }
+
+  async function loadAlbumQuota() {
+    const widget = document.getElementById("album-quota-widget");
+
+    try {
+      const quota = await jsonRequest("/api/v1/publishing/youtube/quota");
+      widget.classList.remove("hidden");
+      widget.textContent =
+        `YouTube upload quota today: ${quota.uploads_remaining_today} upload(s) remaining ` +
+        `(${quota.units_used}/${quota.daily_budget} units used, resets ${quota.resets_at}).`;
+    } catch (error) {
+      widget.classList.add("hidden");
+    }
+  }
+
+  async function openAlbumDetail(albumId) {
+    const panel = document.getElementById("album-detail-panel");
+    const tracksContainer = document.getElementById("album-detail-tracks");
+    currentAlbumDetailId = albumId;
+
+    try {
+      const album = await jsonRequest(`/api/v1/albums/${albumId}`);
+
+      document.getElementById("album-detail-title").textContent = album.title;
+      const metaParts = [`Concept: ${album.concept_id}`, `Status: ${album.status}`];
+      document.getElementById("album-detail-meta").innerHTML = album.youtube_playlist_url
+        ? `${escapeHtml(metaParts.join(" · "))} · <a href="${escapeHtml(album.youtube_playlist_url)}" target="_blank" rel="noopener">View playlist</a>`
+        : escapeHtml(metaParts.join(" · "));
+
+      tracksContainer.innerHTML = "";
+      album.tracks.forEach((track) => {
+        const change = noteTrackStatusChange(track);
+        if (change) {
+          const label = ALBUM_TRACK_STAGE_LABEL[change.to] || change.to;
+          if (change.to === "failed") {
+            showAlbumToast(`${track.title}: failed — ${track.error_message || "see details"}.`, "error");
+          } else {
+            showAlbumToast(`${track.title}: ${label}.`, change.to === "playlist_added" ? "success" : "");
+          }
+        }
+
+        const row = document.createElement("div");
+        row.className = "album-track-row";
+        const badgeClass = ALBUM_TRACK_BADGE_CLASS[track.status] || "badge-pending";
+        const fallbackNote = track.harmony_check_status === "passed_fallback"
+          ? " <span class=\"subtitle\" style=\"margin:0;\">(used safe fallback combination)</span>"
+          : "";
+        const errorNote = track.error_message
+          ? `<div class="status">${escapeHtml(track.error_message)}</div>`
+          : "";
+        row.innerHTML = `
+          <div>
+            <div>${escapeHtml(track.title)}${fallbackNote}</div>
+            ${renderAlbumProgressBar(track.status)}
+            ${errorNote}
+          </div>
+          <span class="badge ${badgeClass}">${escapeHtml(track.status)}</span>
+        `;
+        tracksContainer.appendChild(row);
+      });
+
+      panel.classList.remove("hidden");
+      document.getElementById("album-list").closest(".panel").classList.add("hidden");
+    } catch (error) {
+      window.alert(`Could not load album: ${error.message}`);
+    }
+  }
+
+  document.getElementById("album-detail-close-btn").addEventListener("click", () => {
+    currentAlbumDetailId = null;
+    document.getElementById("album-detail-panel").classList.add("hidden");
+    document.getElementById("album-list").closest(".panel").classList.remove("hidden");
+  });
+
+  function startAlbumPolling() {
+    if (albumPollTimer) {
+      return;
+    }
+
+    albumPollTimer = setInterval(async () => {
+      await loadAlbums();
+      if (currentAlbumDetailId) {
+        await openAlbumDetail(currentAlbumDetailId);
+      }
+    }, ALBUM_POLL_INTERVAL_MS);
+  }
+
+  function stopAlbumPolling() {
+    if (albumPollTimer) {
+      clearInterval(albumPollTimer);
+      albumPollTimer = null;
+    }
+  }
+
+  async function generateAlbum() {
+    const button = document.getElementById("album-generate-btn");
+    const status = document.getElementById("album-generate-status");
+    const conceptId = document.getElementById("album-concept").value;
+    const title = document.getElementById("album-title").value.trim();
+
+    if (!conceptId) {
+      status.textContent = "Pick a concept first.";
+      return;
+    }
+
+    button.disabled = true;
+    status.textContent = "Generating album (this creates 10 tracks to be rendered in the background)...";
+
+    try {
+      await jsonRequest("/api/v1/albums", {
+        method: "POST",
+        body: JSON.stringify({ concept_id: conceptId, title: title || null })
+      });
+      status.textContent = "Album created -- tracks will progress through harmony checks, rendering, and upload automatically.";
+      document.getElementById("album-title").value = "";
+      await loadAlbums();
+    } catch (error) {
+      status.textContent = `Failed to create album: ${error.message}`;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  document.getElementById("album-generate-btn").addEventListener("click", generateAlbum);
+  document.getElementById("album-refresh-btn").addEventListener("click", loadAlbums);
+
+  const VIEW_NAMES = ["home", "create", "albums", "settings"];
+
+  function showView(name) {
+    const target = VIEW_NAMES.includes(name) ? name : "home";
+
+    for (const viewName of VIEW_NAMES) {
+      document.getElementById(`view-${viewName}`).classList.toggle("hidden", viewName !== target);
+    }
+
+    document.querySelectorAll(".sidebar-nav-item").forEach((button) => {
+      button.classList.toggle("active", button.dataset.view === target);
+    });
+
+    if (target === "albums") {
+      loadAlbums();
+      loadAlbumQuota();
+      startAlbumPolling();
+    } else {
+      stopAlbumPolling();
+    }
+
+    if (window.location.hash.slice(1) !== target) {
+      window.location.hash = target;
+    }
+  }
+
+  document.querySelectorAll(".sidebar-nav-item").forEach((button) => {
+    button.addEventListener("click", () => showView(button.dataset.view));
+  });
+
+  window.addEventListener("hashchange", () => showView(window.location.hash.slice(1)));
+
   modeElement.addEventListener("change", updateConditionalFields);
+
+  document.querySelectorAll(".texture-checkbox").forEach((checkbox) => {
+    checkbox.addEventListener("change", renderLayerVolumes);
+  });
+
+  document.getElementById("noise-mode").addEventListener("change", renderLayerVolumes);
+  document.getElementById("frequency").addEventListener("input", renderLayerVolumes);
+
   updateConditionalFields();
   loadPresets();
+  loadRealSamples();
   loadLibrary();
+  loadAlbumConcepts();
+  loadSecretStatuses();
+  refreshYouTubeConnectionStatus();
+  refreshInternetArchiveStatus();
+  showYouTubeConnectNotice();
+  showView(window.location.hash.slice(1) || "home");
 </script>
 </body>
 </html>

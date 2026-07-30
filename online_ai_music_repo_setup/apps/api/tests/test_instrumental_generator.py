@@ -2,8 +2,14 @@ from pathlib import Path
 
 import httpx
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
-from app.services import instrumental_generator
+from app.db.base import Base
+from app.models.app_secret import AppSecret
+from app.services import instrumental_generator, replicate_client
+from app.services import secrets as secrets_service
+from app.services import token_encryption
 
 
 class _FakeSettings:
@@ -14,6 +20,30 @@ class _FakeSettings:
 class _EmptySettings:
     replicate_api_token = ""
     stable_audio_model = "stackadoc/stable-audio-open-1.0"
+
+
+@pytest.fixture
+def db(monkeypatch, tmp_path):
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine, tables=[AppSecret.__table__])
+
+    monkeypatch.setattr(token_encryption, "_LOCAL_KEY_FILE", tmp_path / ".local_secret_key")
+
+    class _EmptyEncryptionSettings:
+        token_encryption_key = ""
+
+    monkeypatch.setattr(token_encryption, "get_settings", lambda: _EmptyEncryptionSettings())
+
+    with Session(engine) as session:
+        yield session
+
+
+def _patch_settings(monkeypatch, settings_obj) -> None:
+    # resolve_secret() (secrets.py) reads its own get_settings import,
+    # separate from this module's -- both need patching to the same fake
+    # settings object.
+    monkeypatch.setattr(instrumental_generator, "get_settings", lambda: settings_obj)
+    monkeypatch.setattr(secrets_service, "get_settings", lambda: settings_obj)
 
 
 class _FakeResponse:
@@ -45,19 +75,20 @@ class _FakeClient:
         return next(self._responses)
 
 
-def test_generate_instrumental_clip_requires_configuration(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(instrumental_generator, "get_settings", lambda: _EmptySettings())
+def test_generate_instrumental_clip_requires_configuration(monkeypatch, tmp_path: Path, db) -> None:
+    _patch_settings(monkeypatch, _EmptySettings())
 
     with pytest.raises(ValueError, match="not configured"):
         instrumental_generator.generate_instrumental_clip(
             "warm piano pad",
             duration_seconds=20,
             output_path=tmp_path / "clip.wav",
+            db=db,
         )
 
 
-def test_generate_instrumental_clip_succeeds_without_polling(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(instrumental_generator, "get_settings", lambda: _FakeSettings())
+def test_generate_instrumental_clip_succeeds_without_polling(monkeypatch, tmp_path: Path, db) -> None:
+    _patch_settings(monkeypatch, _FakeSettings())
 
     responses = [
         _FakeResponse(
@@ -76,6 +107,7 @@ def test_generate_instrumental_clip_succeeds_without_polling(monkeypatch, tmp_pa
         "warm piano pad",
         duration_seconds=20,
         output_path=output_path,
+        db=db,
         seed=42,
     )
 
@@ -83,9 +115,9 @@ def test_generate_instrumental_clip_succeeds_without_polling(monkeypatch, tmp_pa
     assert output_path.read_bytes() == b"fake-wav-bytes"
 
 
-def test_generate_instrumental_clip_polls_until_succeeded(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(instrumental_generator, "get_settings", lambda: _FakeSettings())
-    monkeypatch.setattr(instrumental_generator.time, "sleep", lambda _seconds: None)
+def test_generate_instrumental_clip_polls_until_succeeded(monkeypatch, tmp_path: Path, db) -> None:
+    _patch_settings(monkeypatch, _FakeSettings())
+    monkeypatch.setattr(replicate_client.time, "sleep", lambda _seconds: None)
 
     responses = [
         _FakeResponse(
@@ -111,13 +143,14 @@ def test_generate_instrumental_clip_polls_until_succeeded(monkeypatch, tmp_path:
         "sustained strings",
         duration_seconds=15,
         output_path=output_path,
+        db=db,
     )
 
     assert output_path.read_bytes() == b"fake-wav-bytes"
 
 
-def test_generate_instrumental_clip_raises_on_failed_prediction(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(instrumental_generator, "get_settings", lambda: _FakeSettings())
+def test_generate_instrumental_clip_raises_on_failed_prediction(monkeypatch, tmp_path: Path, db) -> None:
+    _patch_settings(monkeypatch, _FakeSettings())
 
     responses = [
         _FakeResponse(
@@ -135,13 +168,14 @@ def test_generate_instrumental_clip_raises_on_failed_prediction(monkeypatch, tmp
             "warm piano pad",
             duration_seconds=20,
             output_path=tmp_path / "clip.wav",
+            db=db,
         )
 
 
-def test_generate_instrumental_clip_times_out(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(instrumental_generator, "get_settings", lambda: _FakeSettings())
+def test_generate_instrumental_clip_times_out(monkeypatch, tmp_path: Path, db) -> None:
+    _patch_settings(monkeypatch, _FakeSettings())
     monkeypatch.setattr(instrumental_generator, "_POLL_TIMEOUT_SECONDS", 10)
-    monkeypatch.setattr(instrumental_generator.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(replicate_client.time, "sleep", lambda _seconds: None)
 
     # A fake clock that jumps far ahead on every call, so the deadline check
     # deterministically trips on the first poll iteration instead of relying
@@ -152,7 +186,7 @@ def test_generate_instrumental_clip_times_out(monkeypatch, tmp_path: Path) -> No
         clock_state["value"] += 100.0
         return clock_state["value"]
 
-    monkeypatch.setattr(instrumental_generator.time, "monotonic", fake_monotonic)
+    monkeypatch.setattr(replicate_client.time, "monotonic", fake_monotonic)
 
     responses = [
         _FakeResponse(
@@ -170,4 +204,5 @@ def test_generate_instrumental_clip_times_out(monkeypatch, tmp_path: Path) -> No
             "warm piano pad",
             duration_seconds=20,
             output_path=tmp_path / "clip.wav",
+            db=db,
         )

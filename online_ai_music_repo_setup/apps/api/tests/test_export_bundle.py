@@ -20,6 +20,7 @@ def test_create_export_bundle(tmp_path: Path) -> None:
     audio_dir = tmp_path / "audio"
     artwork_dir = tmp_path / "artwork"
     video_dir = tmp_path / "video"
+    caption_dir = tmp_path / "captions"
     export_dir = tmp_path / "exports"
 
     audio_dir.mkdir()
@@ -37,10 +38,12 @@ def test_create_export_bundle(tmp_path: Path) -> None:
         audio_dir=audio_dir,
         artwork_dir=artwork_dir,
         video_dir=video_dir,
+        caption_dir=caption_dir,
         export_dir=export_dir,
         audio_filename="sound.wav",
         artwork_filename="cover.png",
         video_filename=None,
+        caption_filename=None,
         metadata={"title": "Night Rain"},
     )
 
@@ -51,6 +54,7 @@ def test_create_export_bundle(tmp_path: Path) -> None:
     roles = {item["role"] for item in manifest["files"]}
 
     assert {"audio", "artwork", "metadata"} <= roles
+    assert "captions" not in roles
     assert manifest["approval_required_before_publish"] is True
 
     with ZipFile(zip_path) as archive:
@@ -59,3 +63,46 @@ def test_create_export_bundle(tmp_path: Path) -> None:
         assert "cover.png" in names
         assert "metadata.json" in names
         assert "catalog-manifest.json" in names
+
+
+def test_create_export_bundle_includes_captions_when_present(tmp_path: Path) -> None:
+    audio_dir = tmp_path / "audio"
+    artwork_dir = tmp_path / "artwork"
+    video_dir = tmp_path / "video"
+    caption_dir = tmp_path / "captions"
+    export_dir = tmp_path / "exports"
+
+    audio_dir.mkdir()
+    artwork_dir.mkdir()
+    video_dir.mkdir()
+    caption_dir.mkdir()
+
+    audio_path = audio_dir / "sound.wav"
+    create_wav(audio_path)
+
+    caption_path = caption_dir / "sound.srt"
+    caption_path.write_text(
+        "1\n00:00:00,000 --> 00:00:01,000\nHello\n\n",
+        encoding="utf-8",
+    )
+
+    manifest_path, zip_path = create_export_bundle(
+        title="Night Rain",
+        audio_dir=audio_dir,
+        artwork_dir=artwork_dir,
+        video_dir=video_dir,
+        caption_dir=caption_dir,
+        export_dir=export_dir,
+        audio_filename="sound.wav",
+        artwork_filename=None,
+        video_filename=None,
+        caption_filename="sound.srt",
+        metadata={"title": "Night Rain"},
+    )
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    roles = {item["role"] for item in manifest["files"]}
+    assert "captions" in roles
+
+    with ZipFile(zip_path) as archive:
+        assert "sound.srt" in archive.namelist()

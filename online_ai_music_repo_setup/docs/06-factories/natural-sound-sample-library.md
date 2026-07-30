@@ -150,3 +150,50 @@ Returns `503` if `REPLICATE_API_TOKEN` isn't set.
   20-90 minute track means looping a short clip (the same
   repeat-and-trim mechanism as nature samples), not generating the full
   duration directly.
+
+## Importing CC0 recordings from Freesound
+
+This replaces most of the manual "How to add a sample" workflow above
+with a search-and-click flow for real recordings specifically (not
+AI-generated clips, which stay on the Stable Audio Open path above).
+
+### Setup
+
+1. Apply for a Freesound API key at
+   [freesound.org/apiv2/apply](https://freesound.org/apiv2/apply/).
+   Freesound's own docs describe this as an application form, not an
+   instant-issue key -- there may be a short approval wait.
+2. Once issued, paste the key into Settings -> API Keys -> Freesound API
+   Key (or set `FREESOUND_API_KEY` in `.env`). No OAuth setup needed.
+
+### How it works
+
+`POST /api/v1/audio/samples/import-from-freesound` (backed by
+`app/services/freesound_importer.py`) fetches Freesound's `preview-hq-ogg`
+preview for the chosen sound (not the pristine original -- downloading
+that requires Freesound's separate OAuth2 flow, which this integration
+deliberately doesn't implement, in exchange for a much simpler "paste a
+key" setup), decodes it via `soundfile`, and writes a real 16-bit PCM WAV
+into `apps/api/data/sample_library/`, exactly like a manually-added
+recording -- `load_sample_layer` doesn't know or care that the file
+originated from Freesound rather than a manual download.
+
+License safety is enforced twice: search results are filtered to
+`license:"Creative Commons 0"` server-side by Freesound, and the specific
+sound's license is re-verified again right before download (in case the
+search filter is stale by the time a human picks a result). A non-CC0
+sound is refused, not silently imported.
+
+`source_url` is always set to the sound's Freesound page
+(`https://freesound.org/s/<id>/`), preserving the same audit-trail
+convention as manually-added samples. `source_type` is `"freesound"`,
+distinguishing it from a hand-verified `"recording"` or an
+`"ai_generated"` clip.
+
+### Known trade-off
+
+The preview is a lossy-compressed derivative (bitrate undocumented by
+Freesound), not the pristine original. Good enough for ambient beds; for
+a flagship texture worth pristine quality, the stored Freesound sound ID
+in `source_url` makes a future manual re-download via the full OAuth2
+original-download endpoint a cheap follow-up, not a re-search.

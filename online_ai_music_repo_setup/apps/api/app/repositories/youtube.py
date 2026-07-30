@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.youtube_publishing import YouTubeCredential, YouTubePublication
+from app.services.token_encryption import encrypt_token
 
 
 def get_youtube_credential(db: Session) -> YouTubeCredential | None:
@@ -33,8 +34,11 @@ def upsert_youtube_credential(
         db.add(credential)
 
     credential.channel_title = channel_title
-    credential.access_token = access_token
-    credential.refresh_token = refresh_token
+    # Encrypted here rather than left to the caller, so it's impossible for
+    # a future call site to accidentally write a plaintext token -- this
+    # repository function is the one place these values cross into the DB.
+    credential.access_token = encrypt_token(access_token)
+    credential.refresh_token = encrypt_token(refresh_token)
     credential.token_expiry = token_expiry
     credential.scopes = scopes
 
@@ -68,10 +72,12 @@ def mark_publication_uploaded(
     *,
     youtube_video_id: str,
     youtube_url: str,
+    thumbnail_set: bool = False,
 ) -> YouTubePublication:
     publication.status = "uploaded"
     publication.youtube_video_id = youtube_video_id
     publication.youtube_url = youtube_url
+    publication.thumbnail_set = thumbnail_set
     publication.completed_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(publication)

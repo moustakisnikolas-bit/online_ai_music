@@ -2,6 +2,17 @@ import shutil
 import subprocess
 from pathlib import Path
 
+# The still-image input only ever needs enough frames for ffmpeg's filter
+# graph (scale/pad) to run against -- every one of those frames is
+# bit-identical, so decoding/filtering at the real output frame_rate (30fps
+# default) wastes real encode time for nothing: a 1-hour render would walk
+# the filter graph 108,000 times instead of this. Decoupled from the
+# output frame_rate below so the delivered file is still a normal, fully-
+# populated stream (avoids any risk of looking wrong in players that
+# handle sparse keyframes badly) -- verified with a real ffprobe-based
+# test (test_video_renderer.py), not just assumed safe.
+_INPUT_FRAME_RATE = 2
+
 
 def ffmpeg_available() -> bool:
     return shutil.which("ffmpeg") is not None
@@ -62,6 +73,12 @@ def render_static_video(
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = (output_dir / output_filename).resolve()
 
+    # 2-second GOP at the real output frame_rate -- frequent enough
+    # keyframes for YouTube's ingest pipeline and local scrubbing on a
+    # still-image video (libx264's own default GOP, ~250 frames/~8s at
+    # 30fps, is fairly sparse for an hour of nothing-but-a-static-image).
+    gop_size = frame_rate * 2
+
     command = [
         "ffmpeg",
         "-y",
@@ -71,7 +88,7 @@ def render_static_video(
         "-loop",
         "1",
         "-framerate",
-        str(frame_rate),
+        str(_INPUT_FRAME_RATE),
         "-i",
         str(artwork_path),
         "-i",
@@ -79,6 +96,10 @@ def render_static_video(
         "-vf",
         f"scale={width}:{height}:force_original_aspect_ratio=decrease,"
         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2",
+        "-r",
+        str(frame_rate),
+        "-g",
+        str(gop_size),
         "-c:v",
         "libx264",
         "-preset",

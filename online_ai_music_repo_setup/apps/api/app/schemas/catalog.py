@@ -11,6 +11,11 @@ class MetadataGenerateRequest(BaseModel):
     language: str = Field(default="en", min_length=2, max_length=10)
     frequency_hz: float | None = Field(default=None, gt=0, le=20000)
     texture_mode: str | None = Field(default=None, max_length=50)
+    # False (default) keeps the existing deterministic template generator,
+    # unchanged. True routes to an LLM (via OpenRouter) for the creative
+    # fields -- dormant until OPENROUTER_API_KEY is set, same as the AI
+    # artwork provider.
+    use_llm_metadata: bool = False
 
 
 class MetadataPackageResponse(BaseModel):

@@ -11,6 +11,7 @@ class AudioMode(StrEnum):
     ISOCHRONIC_TONES = "isochronic_tones"
     MIXED_AMBIENT = "mixed_ambient"
     PRESET = "preset"
+    SYNTHESIZER = "synthesizer"
 
 
 class ChannelMode(StrEnum):
@@ -34,3 +35,6 @@ class TextureMode(StrEnum):
     WATER = "water"
     THUNDER = "thunder"
     CHIMES = "chimes"
+    DEEP_WATERFALL = "deep_waterfall"
+    DISTANT_THUNDER = "distant_thunder"
+    AIRPLANE_CABIN = "airplane_cabin"

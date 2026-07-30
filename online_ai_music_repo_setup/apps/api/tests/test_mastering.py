@@ -2,6 +2,7 @@ import numpy as np
 
 from app.audio.mastering import (
     apply_mastering_eq,
+    apply_reverb,
     fold_bass_to_mono,
     limit_true_peak,
     measure_lufs,
@@ -77,6 +78,42 @@ def test_apply_mastering_eq_handles_low_sample_rate_without_error() -> None:
     shaped = apply_mastering_eq(samples, 8000)
 
     assert len(shaped) == len(samples)
+
+
+def test_apply_reverb_extends_energy_past_the_dry_signal() -> None:
+    # An impulse (spike + silence) fed through a fully-wet reverb should
+    # have audible energy after the spike, where the dry signal has none --
+    # proof the convolution actually happened, not just a level change.
+    impulse = np.zeros(44100, dtype=np.float32)
+    impulse[100] = 1.0
+
+    wet = apply_reverb(impulse, 44100, decay_seconds=1.0, wet_level=1.0, seed=1)
+
+    tail = wet[5000:20000]
+    assert float(np.max(np.abs(tail))) > 1e-4
+
+
+def test_apply_reverb_wet_level_zero_is_a_no_op() -> None:
+    samples = _sine(440, 1, 44100, 0.3)
+    result = apply_reverb(samples, 44100, wet_level=0.0)
+
+    assert np.allclose(result, samples)
+
+
+def test_apply_reverb_is_deterministic_for_a_given_seed() -> None:
+    samples = _sine(440, 1, 44100, 0.3)
+
+    first = apply_reverb(samples, 44100, seed=7)
+    second = apply_reverb(samples, 44100, seed=7)
+
+    assert np.array_equal(first, second)
+
+
+def test_apply_reverb_preserves_length() -> None:
+    samples = _sine(440, 2, 44100, 0.3)
+    wet = apply_reverb(samples, 44100, decay_seconds=3.0, wet_level=0.5)
+
+    assert len(wet) == len(samples)
 
 
 def test_fold_bass_to_mono_makes_low_frequencies_identical() -> None:

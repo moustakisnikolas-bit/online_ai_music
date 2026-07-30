@@ -8,6 +8,19 @@ from app.audio.types import AudioMode, ChannelMode
 from app.schemas.audio import ToneLayerRequest
 
 
+class DeleteJobResponse(BaseModel):
+    deleted: bool = True
+
+
+class BulkDeleteRequest(BaseModel):
+    job_ids: list[uuid.UUID] = Field(min_length=1, max_length=200)
+
+
+class BulkDeleteResponse(BaseModel):
+    deleted_ids: list[uuid.UUID]
+    not_found_ids: list[uuid.UUID]
+
+
 class AudioJobCreate(BaseModel):
     project_id: uuid.UUID | None = None
     title: str = Field(min_length=1, max_length=255)

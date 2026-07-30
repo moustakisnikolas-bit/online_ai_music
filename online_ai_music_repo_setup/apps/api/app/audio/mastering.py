@@ -1,6 +1,6 @@
 import numpy as np
 import pyloudnorm as pyln
-from scipy.signal import butter, lfilter, resample_poly, sosfilt
+from scipy.signal import butter, fftconvolve, lfilter, resample_poly, sosfilt
 
 
 def measure_lufs(samples: np.ndarray, sample_rate: int) -> float:
@@ -103,6 +103,61 @@ def apply_mastering_eq(samples: np.ndarray, sample_rate: int) -> np.ndarray:
     shaped = _peaking_eq(shaped, sample_rate, freq_hz=8000.0, gain_db=-3.0, q=0.7)
 
     return shaped
+
+
+def _synthesize_reverb_impulse(
+    sample_rate: int,
+    decay_seconds: float,
+    seed: int,
+) -> np.ndarray:
+    # A synthesized room impulse response: exponentially-decaying noise,
+    # lowpass-damped (real rooms absorb high frequencies faster than low
+    # ones -- undamped white noise decaying by itself sounds like static,
+    # not a room tail). This stands in for a literal Freeverb/Schroeder
+    # comb-filter network, which doesn't vectorize the way the rest of
+    # this module's DSP does (its per-sample feedback+lowpass loop can't
+    # be batched through lfilter the way a plain filter can). Convolving
+    # with this impulse response via FFT (see apply_reverb) is O(N log N)
+    # and fully vectorized instead.
+    length = max(1, int(decay_seconds * sample_rate))
+    rng = np.random.default_rng(seed)
+    noise = rng.standard_normal(length).astype(np.float32)
+
+    t = np.arange(length, dtype=np.float32) / sample_rate
+    # -60dB (1/1000) by decay_seconds, i.e. an RT60-style decay curve.
+    envelope = np.exp(-t * (6.907755 / decay_seconds))
+    impulse = noise * envelope
+
+    nyquist = sample_rate / 2.0
+    sos = butter(2, min(6000.0 / nyquist, 0.99), btype="lowpass", output="sos")
+    impulse = sosfilt(sos, impulse).astype(np.float32)
+
+    peak = float(np.max(np.abs(impulse)))
+    return impulse / peak if peak > 0 else impulse
+
+
+def apply_reverb(
+    samples: np.ndarray,
+    sample_rate: int,
+    *,
+    decay_seconds: float = 2.5,
+    wet_level: float = 0.25,
+    seed: int = 42,
+) -> np.ndarray:
+    if wet_level <= 0 or samples.size == 0:
+        return samples.astype(np.float32, copy=False)
+
+    impulse = _synthesize_reverb_impulse(sample_rate, decay_seconds, seed)
+    wet = fftconvolve(samples, impulse, mode="full")[: len(samples)].astype(np.float32)
+
+    # Rough level-match so wet_level is a meaningful dry/wet mix ratio
+    # rather than being at the mercy of the impulse's own arbitrary scale.
+    peak_in = float(np.max(np.abs(samples)))
+    peak_wet = float(np.max(np.abs(wet)))
+    if peak_wet > 0 and peak_in > 0:
+        wet = wet * (peak_in / peak_wet)
+
+    return ((1.0 - wet_level) * samples + wet_level * wet).astype(np.float32)
 
 
 def fold_bass_to_mono(

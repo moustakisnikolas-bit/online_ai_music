@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from app.api.routes.albums import router as albums_router
 from app.api.routes.audio import router as audio_router
 from app.api.routes.audio_jobs import router as audio_jobs_router
 from app.api.routes.audio_assets import router as audio_assets_router
@@ -17,6 +18,9 @@ from app.api.routes.visuals import router as visuals_router
 from app.api.routes.visual_files import router as visual_files_router
 from app.api.routes.exports import router as exports_router
 from app.api.routes.publishing import router as publishing_router
+from app.api.routes.publishing_internet_archive import router as publishing_internet_archive_router
+from app.api.routes.costs import router as costs_router
+from app.api.routes.settings import router as settings_router
 from app.core.config import get_settings
 
 settings = get_settings()
@@ -28,6 +32,7 @@ app = FastAPI(
 )
 
 app.include_router(health_router)
+app.include_router(albums_router, prefix="/api/v1")
 app.include_router(audio_router, prefix="/api/v1")
 app.include_router(audio_jobs_router, prefix="/api/v1")
 app.include_router(audio_assets_router, prefix="/api/v1")
@@ -44,4 +49,7 @@ app.include_router(visuals_router, prefix="/api/v1")
 app.include_router(visual_files_router, prefix="/api/v1")
 app.include_router(exports_router, prefix="/api/v1")
 app.include_router(publishing_router, prefix="/api/v1")
+app.include_router(publishing_internet_archive_router, prefix="/api/v1")
+app.include_router(costs_router, prefix="/api/v1")
+app.include_router(settings_router, prefix="/api/v1")
 app.include_router(web_router)

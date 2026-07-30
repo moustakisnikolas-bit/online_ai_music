@@ -5,12 +5,19 @@ from sqlalchemy import engine_from_config, pool
 
 from app.db.base import Base
 from app.models import (  # noqa: F401
+    AlbumBatch,
+    AlbumTrack,
+    AppSecret,
     AudioAsset,
     AudioJob,
+    GenerationCost,
+    InternetArchivePublication,
+    OAuthState,
     Project,
     TrackRating,
     YouTubeCredential,
     YouTubePublication,
+    YouTubeQuotaUsage,
 )
 
 config = context.config

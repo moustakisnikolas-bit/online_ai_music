@@ -44,8 +44,10 @@ objects typed as response schemas (a common, usually-fine pattern FastAPI
 resolves at runtime via `response_model`, but one mypy can't verify) --
 gating on it needs a dedicated pass, not a quick fix bolted onto this one.
 
-`.aion/backups/`, `zips/`, and `unzipped_folders/` remain open decisions
-for you, not automated cleanup -- still tracked in git as before.
+**Still needed from you:** a decision on `.aion/backups/`, `zips/`, and
+`unzipped_folders/` at the repo root -- keep as history or clean out. Still
+tracked in git as before, not automated cleanup, since it's your call
+whether that history is worth keeping. Remove this line once decided.
 
 ## Milestone 1: Multi-Layer Audio Engine
 
@@ -105,6 +107,30 @@ campfire, thunderstorm, night crickets) -- all `available: false` until
 real files are added. Full curation workflow in
 docs/06-factories/natural-sound-sample-library.md.
 
+Freesound search URLs pre-filtered to CC0 only (verified the `f=license:"Creative Commons 0"`
+filter parameter actually works before handing these over, not guessed),
+one per placeholder manifest entry -- still double-check the license badge
+on each individual sound's own page before downloading, since a search
+filter is a starting point, not a substitute for checking the specific file:
+
+- Ocean (`ocean-waves-01`): https://freesound.org/search/?q=ocean+waves&f=license%3A%22Creative+Commons+0%22
+- Forest birds (`forest-birds-01`): https://freesound.org/search/?q=forest+birds&f=license%3A%22Creative+Commons+0%22
+- Campfire (`campfire-01`): https://freesound.org/search/?q=campfire&f=license%3A%22Creative+Commons+0%22
+- Thunderstorm (`thunderstorm-01`): https://freesound.org/search/?q=thunderstorm&f=license%3A%22Creative+Commons+0%22
+- Night crickets (`night-crickets-01`): https://freesound.org/search/?q=crickets+night&f=license%3A%22Creative+Commons+0%22
+
+Freesound requires a free account to download (browsing/searching doesn't).
+Favor longer clips (60s+) where available -- they crossfade into a loop
+more forgivingly than a short clip repeated many times, per the "Known
+limitation" note below.
+
+**Still needed from you:** browse the URLs above, pick and download one
+file per category, verify the CC0 badge on that specific sound's page, and
+drop the WAV into `apps/api/data/sample_library/` with the matching
+filename from the manifest (or update the manifest entry if you pick a
+different file). Remove this line once real audio is in place for all
+five.
+
 Known limitation: looping is simple repeat-and-trim, not a crossfaded
 seam, so a source recording that doesn't already loop cleanly will have
 an audible seam. Worth revisiting once real samples are in place and the
@@ -124,21 +150,85 @@ Goal: generation speed that can sustain a real publishing cadence.
 Definition of done: a 60-minute stereo track renders in seconds, not
 minutes.
 
-Status: done for the direct (non-chunked) generation path. A 4-layer
-60-minute stereo `mixed_ambient` render went from 320.8s to 27.2s (numpy
-vectorization plus streaming layer mixing, so only one layer's array is
-held in memory at a time instead of all of them at once, which was the
-actual bottleneck on memory-constrained machines). Two follow-ups remain
-open, deliberately deferred rather than rushed:
+Status: done for both the direct (non-chunked) and chunked long-form paths.
+A 4-layer 60-minute stereo `mixed_ambient` render went from 320.8s to 27.2s
+(numpy vectorization plus streaming layer mixing, so only one layer's array
+is held in memory at a time instead of all of them at once, which was the
+actual bottleneck on memory-constrained machines).
 
-- `long_form_audio.py` (the `long_form=True` chunked renderer, meant for
-  genuinely long, memory-bounded output) is untouched and still uses a
-  per-sample Python loop; it needs its own pass, particularly to carry
-  brown-noise filter state correctly across chunk boundaries.
-- Pink noise's 6-section parallel filter bank (6 sequential `lfilter`
-  calls) is the dominant remaining cost at longer durations; combining it
-  into a single higher-order filter would speed it up further but needs
-  care to avoid silently changing its frequency response.
+`long_form_audio.py` (the `long_form=True` chunked renderer, meant for
+genuinely long, memory-bounded output) has been vectorized: sine,
+isochronic, binaural, and white-noise are computed per-chunk directly from
+absolute sample index (no cross-chunk state needed, so chunk size has zero
+effect on output). Brown noise carries its `lfilter` filter state (`zi`)
+across chunk boundaries via a persistent leaky integrator, and matches the
+non-chunked path's peak-normalization semantics ("amplitude" = true peak)
+via a first pass that runs the same filter once to find the real peak
+(tracking only a scalar, not the full signal, so the memory-bounded design
+is preserved) before a second pass writes the correctly-scaled audio. A
+full 60-minute stereo brown-noise track (the schema's max duration) renders
+in ~9s against the live server, hits the requested peak exactly (verified:
+requested 0.6, measured 0.5999), and has zero clipped samples. 9 new tests
+added (chunk-size independence, peak-matching, unseeded reproducibility,
+no-clipping); full suite (160 tests) and ruff both pass.
+
+**Update: pink noise filter consolidated.** The 6-section parallel filter
+bank (6 sequential `lfilter` calls, each applied to the same white-noise
+input and summed -- not a true cascade despite the name) is mathematically
+a single rational transfer function once combined over a common
+denominator. `dsp.py` now derives that single filter's numerator/
+denominator at import time via polynomial arithmetic (not hand-transcribed
+-- these poles sit up to 0.99886, close enough to the unit circle that
+even small coefficient rounding compounds into real divergence over a long
+render, confirmed the hard way: an earlier attempt using hand-copied
+8-significant-digit literals diverged by 0.37 over 200k samples versus the
+~1e-6 float32-rounding-level agreement the full-precision computed version
+achieves). One `lfilter` call this way is 6.4x faster than the original 6
+(20.5s -> 3.2s for a 1-hour mono render, measured). Verified: 3 new tests
+including a regression test that reimplements the original 6-call approach
+independently in the test file and asserts the two stay within 1e-4; full
+suite (181 tests) and ruff pass; confirmed live against the server.
+
+That fix closes out this milestone's originally-scoped follow-up, but
+profiling a full-scale request while verifying it live (`cProfile` on a
+10-minute stereo pink-noise render, since the pattern scales linearly)
+surfaced a **new, separate bottleneck**: pink noise's own filtering is now
+a small fraction of total time. The dominant cost at full 60-minute scale
+is the mastering/validation pipeline scanning the entire signal --
+`true_peak_dbtp`'s oversampled `resample_poly` call (called twice per
+render, ~40% of total time) and `detect_excessive_high_frequency_energy`'s
+single large FFT are both O(n) over the full signal length with real
+per-sample cost, not something the pink-noise fix touches. End-to-end,
+a full 60-minute stereo pink-noise render still takes ~75-90s on a warm
+server. **Update: mastering pipeline parallelized across channels.** The dominant
+cost identified above -- `limit_true_peak` (and, when enabled,
+`apply_mastering_eq`) processing each channel independently -- turned out
+to be safely parallelizable: these scipy calls (`resample_poly`, `lfilter`)
+release the GIL during the heavy C computation, confirmed empirically
+(2-channel `true_peak_dbtp`: ~1.95x wall-clock speedup, bit-identical
+results, verified with `p1 == p1b` on the actual returned floats, not an
+approximate comparison). Added a small `_parallel_map` helper in
+`audio_generator.py` that runs independent per-channel work across a
+thread pool (skipped for mono, where there's nothing to parallelize), and
+used it for both call sites. This is a pure execution-strategy change, not
+an algorithm change -- same inputs still produce the same outputs, just
+computed concurrently instead of sequentially, so there was no correctness
+tradeoff to weigh here the way the pink-noise coefficient change had.
+
+Verified: full suite (181 tests, unchanged) passes with no modifications
+needed, confirming no observable behavior changed. A direct 10-minute
+stereo render (mastering EQ on) dropped from ~12s to ~11s locally and
+completed in 16.5s end-to-end through the live server, with the exact same
+`loudness_lufs` value (`-21.641061572225876`) reproduced across both the
+direct call and the live HTTP request -- deterministic, correct output.
+Attempts to re-verify at the full 60-minute scale repeatedly hung in this
+sandbox environment's background-process handling (unrelated to this
+change: an unrelated earlier direct-DB-query script hung the same way
+mid-session) rather than genuinely taking longer, confirmed by near-zero
+CPU time on the stuck process; killed cleanly rather than chased further,
+since the 10-minute scale verification (which does complete reliably) is
+sufficient to trust the same linear-scaling logic already established for
+every other numpy-vectorized change this session.
 
 ## Milestone 4: YouTube Publishing Integration
 
@@ -164,21 +254,60 @@ upload via `videos.insert`, review-status gate tied to
 `privacy_status=private` so a human still reviews on YouTube itself before
 anything goes public). Known gaps, called out rather than silently left:
 
-- Not runnable end to end in this environment: there is no live Postgres
-  here, and (like the pre-existing `review.py` / `audio_jobs.py` routes)
-  the DB-backed parts of this feature have no test coverage against a real
-  database. Everything mockable (OAuth URL construction, the
-  approval/completion guard, the resumable-upload call, channel lookup,
-  request schema validation) has unit tests; the wiring through
-  `Depends(get_db)` does not.
-- OAuth `state` is generated and required round-trip, but not validated
-  against a server-side session store (none exists yet), so it is not a
-  complete CSRF defense on its own.
-- While adding the migration, found the existing chain is already broken:
-  `0007_add_audio_review_workflow.py` declares `down_revision = "0006"`,
-  but no `0006` migration file exists in the repo. Not introduced by this
-  change; left as-is rather than silently patched over, and worth fixing
-  before anyone relies on `alembic upgrade head` against a real database.
+- ~~Not runnable end to end in this environment: there is no live
+  Postgres here~~ -- **outdated as of this session**: a persistent local
+  Postgres container was stood up (`online_ai_music_repo_setup-postgres-1`,
+  host port 5435) and has since been used to apply every migration through
+  0011 and to verify DB-backed behavior live (track ratings, the OAuth
+  CSRF fix, this migration chain fix). What's still genuinely true: no
+  route-level test suite coverage exists for the DB-backed parts of
+  `review.py` / `audio_jobs.py` / most of `publishing.py` (everything
+  mockable -- OAuth URL construction, the approval/completion guard, the
+  resumable-upload call, channel lookup, request schema validation -- has
+  unit tests; the wiring through `Depends(get_db)` mostly doesn't, aside
+  from the new `oauth_state` repository tests). That's a real, addressable
+  gap, not an environment limitation anymore.
+- ~~While adding the migration, found the existing chain is already
+  broken: `0007_add_audio_review_workflow.py` declares
+  `down_revision = "0006"`, but no `0006` migration file exists~~ --
+  **fixed earlier this session**: `0007`'s `down_revision` was repointed to
+  `0005` (the last migration that actually exists), and `alembic upgrade
+  head` has run cleanly through 0011 since. This note was left stale after
+  the fix; corrected now while auditing open items.
+
+**Update: OAuth `state` CSRF gap closed.** The `state` was generated and
+required round-trip, but never actually validated server-side -- any
+`state` value, including one an attacker chose, was accepted by
+`/callback`. Added `OAuthState` (new `oauth_states` table, migration 0011)
+and a repository (`repositories/oauth_state.py`) that persists each issued
+state with a 10-minute expiry and consumes it exactly once: `/authorize`
+now writes the state it hands out; `/callback` looks it up, deletes it
+unconditionally on first sight (so it can never be replayed even if the
+purpose or expiry check fails), and rejects the request with 400 unless
+the state was found, unexpired, and issued for `purpose="youtube"`.
+
+Verified: 5 new repository tests (create-then-consume, replay-fails,
+unknown-state-fails, wrong-purpose-fails-and-still-consumes,
+expired-fails) against a real SQLAlchemy session (SQLite in-memory, since
+`OAuthState` uses only portable column types) -- this surfaced a real bug
+during testing (naive vs. timezone-aware datetime comparison failing on
+SQLite's datetime round-trip), fixed by normalizing to UTC before
+comparing. Migration applied cleanly against the persistent local Postgres
+(`0010 -> 0011`). Confirmed live against the running server: a callback
+with a never-issued state is rejected (400); a callback with a real,
+freshly-issued state passes the CSRF gate and correctly proceeds to the
+next real check in the chain (`YouTube OAuth is not configured` -- expected,
+since no Google credentials exist in this environment); replaying that
+same now-consumed state on a second call is rejected. Full suite (178
+tests) and ruff both pass.
+
+**Still needed from you:** a Google Cloud Console project with OAuth
+credentials (`YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`) set in `.env`,
+to run the `/authorize` -> Google consent screen -> `/callback` flow
+against a real YouTube channel for the first time -- everything up to that
+external call is built, tested, and now CSRF-safe, but the OAuth exchange
+itself has never run for real. Remove this line once you've connected a
+real channel and confirmed `GET /publishing/youtube/status` reports it.
 
 ## Milestone 5: Distributor Integration (Spotify / Apple / Amazon)
 
@@ -231,6 +360,12 @@ monthly income from this project exceeds 2x LabelGrid's monthly API cost
 that, the cost of automating isn't justified by the manual workload it
 would save.
 
+**Still needed from you:** create a free RouteNote account when you're
+ready to publish to Spotify/Apple/Amazon manually -- no code work is
+blocked on this, it's a business-side account signup, not a technical
+integration. Remove this line once you have an account (or once the
+LabelGrid revisit trigger fires and this whole section gets rebuilt).
+
 ## Milestone 6: Catalog & Release Pipeline UX
 
 Goal: turn the current single-page generation form into a content
@@ -279,6 +414,13 @@ ambient_layers configuration (no column for it yet -- see the repository
 docstring); the catalog only needs the output file and descriptive fields
 to display and review, not the exact layer recipe.
 
+**Still needed from you:** a decision on how a track's audio, video, and
+artwork tie together as one "release" (e.g. one job = one release with
+optional video/artwork attached vs. an explicit separate release object
+that references a job). Once decided, the publish button and the
+per-job-video-association column are both small, mechanical additions.
+Remove this line once that decision is made and the button is wired up.
+
 ## Milestone 7: Visual Polish
 
 Goal: a UI that reads like a real product, not an internal test form.
@@ -325,6 +467,58 @@ work best done with visual feedback in hand, i.e. after someone has
 actually looked at this in a browser -- doing a large speculative
 CSS pass with no way to see the result risked making it worse, not
 better.
+
+**Still needed from you:** actually click through the UI in a browser
+(`uvicorn app.main:app` from `apps/api/`, open `/app`) and say what looks
+off -- spacing, type scale, color, whatever stands out. Remove this line
+once that pass has happened, whether the answer is "looks fine" or a
+specific punch list.
+
+**Update: AI-generated (photorealistic) cover art.** `artwork_generator.py`
+was, and remains, a purely procedural PIL renderer (gradient background +
+blurred circles + text) -- it was never AI-generated and can't produce
+realistic imagery no matter how it's tuned. Added `ai_artwork_generator.py`
+as an alternate provider alongside it, selectable per-request via the
+existing `/visuals/artwork/generate` endpoint's new `provider` field
+(`"procedural"` default, unchanged behavior; `"replicate"`; `"openrouter"`):
+
+- **Replicate (active path)**: reuses the existing `REPLICATE_API_TOKEN`
+  setting already in place for Stable Audio Open, calling a Flux model
+  (`FLUX_MODEL`, defaults to `black-forest-labs/flux-1.1-pro`) via the same
+  async predict-then-poll pattern as `instrumental_generator.py`. Field
+  names are a best guess following Flux's typical Replicate interface, not
+  yet verified against a real token -- same caveat as the audio model.
+- **OpenRouter (deliberately dormant)**: OpenRouter launched a unified
+  Image API in June 2026 (30+ models -- Flux, Gemini image, Seedream,
+  GPT-image -- behind one key). Verified the exact request/response shape
+  against OpenRouter's own docs (`POST /api/v1/images`, base64 image in
+  `data[0].b64_json`, synchronous, no polling needed) and built the client
+  against that. Per explicit decision, this is wired up and tested but left
+  unconfigured (`OPENROUTER_API_KEY` empty) -- ready to activate with just
+  an env var whenever it's wanted, without writing new code.
+
+Scope was deliberately kept to images only; AI video generation (Runway,
+Kling, Luma-class tools) is materially more expensive and slower per clip
+than a single cover image and was explicitly decided against for now --
+the existing motion-graphics `video_renderer.py`/`video_package.py`
+pipeline (assembles video from audio + a static image) is unchanged.
+
+Verified: 15 new tests (provider config-gating, Replicate poll/success/
+failure paths, OpenRouter base64 decode, route-level provider wiring) plus
+the full suite (173 tests) and ruff, all green. Confirmed against the live
+server: the procedural default path is unaffected (still returns a real
+PNG), and both AI providers correctly return a 400 with a clear
+"not configured" message when their respective key/token is absent --
+which is the actual state of this environment, since no Replicate or
+OpenRouter credentials exist here.
+
+**Still needed from you:** set `REPLICATE_API_TOKEN` (activates the
+default Flux provider -- also unlocks Milestone 11's Stable Audio Open
+verification below, same token) and/or `OPENROUTER_API_KEY` (activates the
+dormant alternate provider) in `.env`, then generate one real cover and
+confirm it actually looks photorealistic and matches the style prompt --
+that's the one thing that can't be verified without a real key. Remove
+this line once you've generated and looked at a real AI cover.
 
 ## Phase 2: Therapeutic Music Production Spec
 
@@ -598,6 +792,87 @@ docs/06-factories/natural-sound-sample-library.md rather than assumed.
 Everything mockable is unit tested (API request/poll/download flow,
 failure/timeout handling, manifest registration); the real API call has
 never been made.
+
+**Still needed from you:** the same `REPLICATE_API_TOKEN` as the AI
+artwork section above -- generate one real "warm piano" or "sustained
+strings" clip via `POST /audio/samples/generate` and judge honestly
+whether it sounds like an instrument or like ambient texture, since that
+determines whether this path is sufficient or whether the "build it
+in-house" alternative (algorithmic composition + a real instrument engine)
+needs to be revisited. Remove this line once you've listened to a real
+generated clip and made that call.
+
+## Milestone 12: Async Worker Pipeline (`apps/worker`)
+
+Goal: a second, queue-backed generation path (`POST /audio/jobs` -> Redis
+-> `apps/worker` consumes and calls the same generation engine) alongside
+the synchronous `/generate-and-catalog` path the UI actually uses.
+
+Status: fixed and verified working end to end for the first time in this
+project's history. Full story, in order, since it involves a real mistake:
+
+1. While auditing the whole project for dead/broken code, `POST
+   /audio/jobs` + `app/services/audio_queue.py` were judged genuinely dead
+   (nothing in the codebase consumed the queue it pushed to) and removed.
+2. **That judgment was wrong** -- `apps/worker/app/main.py` was never
+   checked. It's a complete, working consumer: blocks on the Redis queue
+   (`client.brpop`), loads the job, calls the same `generate_audio()`
+   engine everything else uses, and updates the `AudioJob` row. It just
+   happens to be a separate app under `apps/worker/`, not something the
+   audit's dead-code grep inside `apps/api/` would surface. Deleting
+   `audio_queue.py` broke its import outright. Caught by an even broader
+   audit pass immediately after, not by the test suite (there was no
+   `apps/worker/tests/` at all, despite `pyproject.toml` already expecting
+   one) -- confirmed the mistake honestly rather than quietly patching it.
+3. Restored `audio_queue.py`, `POST /audio/jobs`, `AudioJobCreate`, and
+   `create_audio_job` to their exact original committed content (via `git
+   show`, not retyped from memory -- confirmed byte-identical afterward,
+   `git status` shows zero diff on those files).
+4. Actually running the restored pipeline for the first time surfaced a
+   real, separate bug: `GENERATED_AUDIO_DIR` is a relative path
+   (`data/generated/audio`), so it resolves against whatever the *current
+   process's* working directory happens to be. The API (run via `uvicorn`
+   from `apps/api/`) and the worker (run via `python
+   apps/worker/app/main.py` from the repo root, matching how a developer
+   would naturally invoke it locally) landed on two different absolute
+   directories -- a worker-completed job's file existed on disk, but the
+   API's own `/audio/files/{filename}` route 404'd on it, since it was
+   looking in a different folder. Confirmed this wouldn't happen in the
+   real Docker deployment specifically (both `api` and `worker` services in
+   docker-compose.yml already set an absolute `GENERATED_AUDIO_DIR:
+   /app/data/generated/audio` and share the same volume mount) -- purely a
+   local-dev-workflow gap. Fixed by setting an absolute
+   `GENERATED_AUDIO_DIR` in the repo-root `.env` (which is what the worker
+   reads when launched from the repo root; also fixed that same `.env`'s
+   `DATABASE_URL`/`REDIS_URL` to use `127.0.0.1` instead of `localhost`,
+   same IPv6-loopback issue documented earlier in this doc, which this
+   separate `.env` file had independently reverted to since it predates
+   that fix).
+5. Verified live, for real: submitted a job through `POST /audio/jobs`,
+   watched the running worker's own log pick it up and print `Completed
+   audio job: <id>`, confirmed via `GET /audio/jobs/{id}` that `status`
+   went to `completed` with a real `output_file_path`, confirmed the WAV
+   is valid (correct channel count/sample rate/duration via `wave.open`),
+   and confirmed the API can actually serve it back
+   (`GET /audio/files/{filename}` -> 200, not 404).
+6. `apps/worker/tests/test_main.py` added (didn't exist before, despite
+   `pyproject.toml` already listing `apps/worker/tests` as a test path) --
+   5 tests covering `process_job`'s missing-job, wrong-status,
+   success, generation-failure, and retry-status branches. Loaded via
+   `importlib` rather than a normal import, because `apps/api/app` and
+   `apps/worker/app` are both top-level packages literally named `app` --
+   whichever imports first in a given interpreter session wins that name,
+   silently shadowing the other (this is the same mechanism behind the
+   worker's script-only invocation requirement). Confirmed both test
+   suites run correctly together from the repo root (201 passed, api +
+   worker, no collision) as well as independently.
+
+This path remains disconnected from the web UI -- nothing in `index.html`
+calls `POST /audio/jobs`, only `/generate-and-catalog`. It's real, tested,
+and now verified working, but still a second, currently-unused generation
+path rather than the active one. Whether to wire the UI to it, keep both
+paths, or consolidate on one is a separate, later decision -- out of scope
+for "make sure what's here actually works."
 
 ## Sequencing Notes
 

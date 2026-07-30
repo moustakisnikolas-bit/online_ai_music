@@ -15,6 +15,10 @@ packages = []
 [tool.pytest.ini_options]
 pythonpath = ["apps/api", "apps/worker"]
 testpaths = ["apps/api/tests", "apps/worker/tests"]
+# E2E tests need a real browser and a live dev server -- excluded from the
+# default run (which stays fast and dependency-free); run explicitly with
+# `pytest apps/api/tests/e2e/`.
+norecursedirs = ["e2e"]
 
 [tool.ruff]
 line-length = 100

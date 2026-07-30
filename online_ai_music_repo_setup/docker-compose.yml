@@ -25,6 +25,13 @@ services:
       timeout: 5s
       retries: 10
 
+  # Not currently used by the app -- everything writes to local disk
+  # (data/generated/...) instead. Kept here, not wired in, since object
+  # storage is legitimate future work for a real deployment (durability,
+  # not exposing the whole server to serve files); the unused `minio`
+  # Python package was removed from requirements.txt since that part was
+  # genuinely dead, but standing this service down is a bigger call than a
+  # quick fix, so it's left running and clearly labeled instead.
   minio:
     image: minio/minio
     command: server /data --console-address ":9001"
@@ -57,10 +64,15 @@ services:
       DATABASE_URL: postgresql+psycopg://aion:aion@postgres:5432/aion
       REDIS_URL: redis://redis:6379/0
       GENERATED_AUDIO_DIR: /app/data/generated/audio
+      SOUNDFONT_PATH: /app/data/soundfonts/GeneralUser-GS.sf2
     ports:
       - "8000:8000"
     volumes:
       - ./data/generated:/app/data/generated
+      # Drop the .sf2 file here on the host once (see
+      # apps/api/data/soundfonts/README.md) -- not baked into the image,
+      # so it doesn't need a rebuild to add/update.
+      - ./data/soundfonts:/app/data/soundfonts
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -82,6 +94,25 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_healthy
+
+  # Separate process from `worker` -- that one blocks on real audio-job
+  # processing via Redis BRPOP and isn't a safe place to interleave the
+  # album pipeline's hours-spanning harmony-check/render/upload pacing.
+  album_worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    command: ["python", "/app/apps/worker/app/album_worker.py"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://aion:aion@postgres:5432/aion
+      GENERATED_AUDIO_DIR: /app/data/generated/audio
+      SOUNDFONT_PATH: /app/data/soundfonts/GeneralUser-GS.sf2
+    volumes:
+      - ./data/generated:/app/data/generated
+      - ./data/soundfonts:/app/data/soundfonts
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
 volumes:
   aion-postgres:
