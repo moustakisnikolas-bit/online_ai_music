@@ -3,7 +3,7 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 
 @dataclass(frozen=True)
@@ -41,11 +41,18 @@ def safe_filename(value: str) -> str:
     return cleaned or "aion-artwork"
 
 
-def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+def _font(size: int, *, bold: bool = False) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    # PIL's load_default() fallback ignores the requested size entirely
+    # (a tiny fixed bitmap font) -- silently discovered on this Windows
+    # dev machine, since none of the original mac/Linux-only candidates
+    # below exist here, making every text draw illegibly small regardless
+    # of the size passed in. Windows paths added so this actually renders
+    # at the requested size on the platform this app runs on.
     candidates = [
-        "/System/Library/Fonts/Supplemental/Arial.ttf",
+        "C:/Windows/Fonts/arialbd.ttf" if bold else "C:/Windows/Fonts/arial.ttf",
+        "/System/Library/Fonts/Supplemental/Arial Bold.ttf" if bold else "/System/Library/Fonts/Supplemental/Arial.ttf",
         "/System/Library/Fonts/Supplemental/Helvetica.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
     ]
 
     for candidate in candidates:
@@ -135,11 +142,13 @@ def _fit_text(
     text: str,
     max_width: int,
     initial_size: int,
+    *,
+    bold: bool = False,
 ) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     size = initial_size
 
     while size >= 18:
-        font = _font(size)
+        font = _font(size, bold=bold)
         box = draw.textbbox((0, 0), text, font=font)
 
         if box[2] - box[0] <= max_width:
@@ -147,7 +156,7 @@ def _fit_text(
 
         size -= 4
 
-    return _font(18)
+    return _font(18, bold=bold)
 
 
 def generate_artwork(
@@ -241,3 +250,66 @@ def generate_artwork(
     image.save(output_path, format="PNG", optimize=True)
 
     return output_path
+
+
+def composite_thumbnail_labels(image_path: Path, *, headline: str, subline: str) -> None:
+    """Stamps a real, guaranteed-legible headline/subline onto an
+    existing image in place.
+
+    AI image models (flux-schnell especially, tuned for speed over
+    fidelity) render text unreliably -- garbled letters, misspellings.
+    The AI photo is deliberately generated text-free and this composites
+    real text on top afterward instead, the same way a human thumbnail
+    designer layers text over a background photo rather than generating
+    both together.
+    """
+    image = Image.open(image_path).convert("RGB")
+    width, height = image.size
+
+    # A modest, thumbnail-appropriate contrast/saturation boost -- a
+    # small preview needs to read clearly at a glance, and a slightly
+    # punchier image holds up better at thumbnail size than a flat one.
+    image = ImageEnhance.Contrast(image).enhance(1.12)
+    image = ImageEnhance.Color(image).enhance(1.15)
+
+    # Dark scrim across the lower third so the text stays legible over
+    # any photo content, not just ones that happen to already be dark
+    # there -- same alpha-mask paste idiom as _draw_ambient_orbs above.
+    scrim_height = int(height * 0.38)
+    scrim = Image.new("RGBA", (width, scrim_height), (0, 0, 0, 0))
+    scrim_draw = ImageDraw.Draw(scrim)
+    for y in range(scrim_height):
+        alpha = int(215 * (y / max(1, scrim_height - 1)))
+        scrim_draw.line([(0, y), (width, y)], fill=(0, 0, 0, alpha))
+    image.paste(scrim, (0, height - scrim_height), scrim)
+
+    draw = ImageDraw.Draw(image)
+    margin = int(width * 0.06)
+    max_width = width - (margin * 2)
+
+    headline_font = _fit_text(draw, headline, max_width, max(80, width // 8), bold=True)
+    subline_font = _fit_text(draw, subline, max_width, max(32, width // 24))
+
+    headline_box = draw.textbbox((0, 0), headline, font=headline_font)
+    headline_height = headline_box[3] - headline_box[1]
+    subline_box = draw.textbbox((0, 0), subline, font=subline_font)
+    subline_height = subline_box[3] - subline_box[1]
+
+    gap = int(height * 0.02)
+    subline_y = height - margin - subline_height
+    headline_y = subline_y - gap - headline_height
+
+    shadow_offset = max(2, width // 400)
+
+    for text, font, y in (
+        (headline, headline_font, headline_y),
+        (subline, subline_font, subline_y),
+    ):
+        draw.text((margin + shadow_offset, y + shadow_offset), text, font=font, fill=(0, 0, 0))
+        draw.text((margin, y), text, font=font, fill=(255, 255, 255))
+
+    # YouTube's real custom-thumbnail cap is 2MB -- a 1280x720 PNG this
+    # simple (photo + scrim + two text lines) comes in well under that in
+    # practice (verified against a real generated file), so no fallback
+    # compression path here.
+    image.save(image_path, format="PNG", optimize=True)

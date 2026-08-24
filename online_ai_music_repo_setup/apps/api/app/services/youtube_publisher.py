@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 
 from google.auth.transport.requests import Request as GoogleAuthRequest
@@ -12,6 +13,20 @@ from app.models.audio_job import AudioJob
 from app.models.youtube_publishing import YouTubeCredential
 from app.services.secrets import resolve_secret
 from app.services.token_encryption import decrypt_token
+
+# Google's incremental authorization (include_granted_scopes="true",
+# used below so re-authorizing for playlist support upgrades an existing
+# connection instead of replacing it) legitimately returns a token whose
+# granted "scope" is the union of every scope the user has ever approved
+# for this app -- not just the one scope this particular Flow requested.
+# oauthlib's strict RFC 6749 check treats any such mismatch as fatal and
+# raises, which turned every real re-authorization attempt into a 500
+# (confirmed via a real reproduction: exchange_code_for_credentials
+# raised oauthlib's own Warning subclass, "Scope has changed from ... to
+# ..."). This is oauthlib's own documented escape hatch for exactly this
+# situation -- must be set before fetch_token() is ever called, so it's
+# set here at import time rather than inside a request handler.
+os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
 
 # youtube.upload alone can insert/update/delete videos but can't read
 # channel info -- fetch_channel_identity()'s channels().list(mine=True)
@@ -200,6 +215,11 @@ def upload_video(
     return video_id, video_url
 
 
+def delete_video(credentials: Credentials, *, video_id: str) -> None:
+    service = build(_API_SERVICE_NAME, _API_VERSION, credentials=credentials)
+    service.videos().delete(id=video_id).execute()
+
+
 def set_video_thumbnail(
     credentials: Credentials,
     *,
@@ -268,3 +288,55 @@ def add_video_to_playlist(
     response = service.playlistItems().insert(part="snippet", body=body).execute()
 
     return response["id"]
+
+
+def search_top_videos(credentials: Credentials, *, query: str, max_results: int = 10) -> list[dict]:
+    """Real competitor research: the highest-viewed public videos for a
+    search query, via search.list (ordered by viewCount) + videos.list
+    for real view counts (search.list itself doesn't return statistics).
+    Two real API calls, real quota cost (search.list ~100 units,
+    videos.list a few more) -- not scraping, the same connected
+    credentials/quota ledger as everything else in this module.
+    """
+    service = build(_API_SERVICE_NAME, _API_VERSION, credentials=credentials)
+
+    search_response = (
+        service.search()
+        .list(
+            q=query,
+            part="snippet",
+            type="video",
+            order="viewCount",
+            maxResults=max_results,
+            relevanceLanguage="en",
+        )
+        .execute()
+    )
+    items = search_response.get("items", [])
+    video_ids = [item["id"]["videoId"] for item in items if "videoId" in item.get("id", {})]
+
+    if not video_ids:
+        return []
+
+    stats_response = (
+        service.videos().list(part="statistics,contentDetails", id=",".join(video_ids)).execute()
+    )
+    stats_by_id = {item["id"]: item for item in stats_response.get("items", [])}
+
+    results = []
+    for item in items:
+        video_id = item.get("id", {}).get("videoId")
+        if video_id is None:
+            continue
+        stats = stats_by_id.get(video_id, {})
+        results.append(
+            {
+                "video_id": video_id,
+                "title": item["snippet"]["title"],
+                "channel_title": item["snippet"]["channelTitle"],
+                "view_count": int(stats.get("statistics", {}).get("viewCount", 0)),
+                "duration": stats.get("contentDetails", {}).get("duration"),
+            }
+        )
+
+    return results

@@ -152,6 +152,124 @@ def test_status_reports_has_playlist_scope_false_for_legacy_scopes() -> None:
         db.close()
 
 
+class _FakeCredentials:
+    """A stand-in for google.oauth2.credentials.Credentials -- only
+    needs a .refresh() method, since that's the only thing
+    _token_is_currently_valid calls on it directly."""
+
+    def __init__(self, *, refresh_raises: Exception | None = None) -> None:
+        self._refresh_raises = refresh_raises
+
+    def refresh(self, request) -> None:
+        if self._refresh_raises is not None:
+            raise self._refresh_raises
+
+
+def test_status_reports_connected_false_when_token_is_actually_invalid(monkeypatch) -> None:
+    # The real bug this replaced: a stored credential row existing was
+    # treated as "connected" even when the refresh token had been
+    # revoked/expired (invalid_grant) -- only a real, forced refresh
+    # catches that, which is what this exercises.
+    publishing._TOKEN_CHECK_CACHE.clear()
+    invalid_grant = ValueError("invalid_grant: Token has been expired or revoked.")
+    monkeypatch.setattr(
+        publishing,
+        "credentials_from_stored",
+        lambda record, *, db: _FakeCredentials(refresh_raises=invalid_grant),
+    )
+    monkeypatch.setattr(publishing, "fetch_channel_identity", lambda credentials: ("id", "title"))
+
+    db = SessionLocal()
+    try:
+        db.add(
+            YouTubeCredential(
+                channel_id="UC-dead-token-test",
+                channel_title="Dead Token Channel",
+                access_token="enc-access",
+                refresh_token="enc-refresh",
+                token_expiry=None,
+                scopes=["https://www.googleapis.com/auth/youtube"],
+            )
+        )
+        db.commit()
+
+        response = client.get("/api/v1/publishing/youtube/status")
+
+        assert response.status_code == 200
+        assert response.json()["connected"] is False
+    finally:
+        db.execute(delete(YouTubeCredential).where(YouTubeCredential.channel_id == "UC-dead-token-test"))
+        db.commit()
+        db.close()
+
+
+def test_status_reports_connected_true_when_token_actually_works(monkeypatch) -> None:
+    publishing._TOKEN_CHECK_CACHE.clear()
+    monkeypatch.setattr(publishing, "credentials_from_stored", lambda record, *, db: _FakeCredentials())
+    monkeypatch.setattr(
+        publishing, "fetch_channel_identity", lambda credentials: ("UC-live-token-test", "Live Channel")
+    )
+
+    db = SessionLocal()
+    try:
+        db.add(
+            YouTubeCredential(
+                channel_id="UC-live-token-test",
+                channel_title="Live Channel",
+                access_token="enc-access",
+                refresh_token="enc-refresh",
+                token_expiry=None,
+                scopes=["https://www.googleapis.com/auth/youtube"],
+            )
+        )
+        db.commit()
+
+        response = client.get("/api/v1/publishing/youtube/status")
+
+        assert response.status_code == 200
+        assert response.json()["connected"] is True
+    finally:
+        db.execute(delete(YouTubeCredential).where(YouTubeCredential.channel_id == "UC-live-token-test"))
+        db.commit()
+        db.close()
+
+
+def test_status_caches_the_live_check_within_ttl(monkeypatch) -> None:
+    publishing._TOKEN_CHECK_CACHE.clear()
+    monkeypatch.setattr(publishing, "credentials_from_stored", lambda record, *, db: _FakeCredentials())
+
+    call_count = {"n": 0}
+
+    def _counting_fetch(credentials):
+        call_count["n"] += 1
+        return ("UC-cache-test", "Cache Test Channel")
+
+    monkeypatch.setattr(publishing, "fetch_channel_identity", _counting_fetch)
+
+    db = SessionLocal()
+    try:
+        db.add(
+            YouTubeCredential(
+                channel_id="UC-cache-test",
+                channel_title="Cache Test Channel",
+                access_token="enc-access",
+                refresh_token="enc-refresh",
+                token_expiry=None,
+                scopes=["https://www.googleapis.com/auth/youtube"],
+            )
+        )
+        db.commit()
+
+        client.get("/api/v1/publishing/youtube/status")
+        client.get("/api/v1/publishing/youtube/status")
+
+        assert call_count["n"] == 1
+    finally:
+        db.execute(delete(YouTubeCredential).where(YouTubeCredential.channel_id == "UC-cache-test"))
+        db.commit()
+        db.close()
+
+
 def test_quota_status_endpoint_returns_expected_shape(monkeypatch) -> None:
     from datetime import date as date_cls
 

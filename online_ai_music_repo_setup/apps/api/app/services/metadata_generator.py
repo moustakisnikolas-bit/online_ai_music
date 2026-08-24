@@ -1,11 +1,28 @@
 from dataclasses import dataclass
 
 
+COMPLIANCE_NOTE = (
+    "Use as ambient or relaxation content. Do not present this asset "
+    "as medical treatment, disease prevention or guaranteed therapy."
+)
+
+
 SAFE_CONTEXT_LABELS = {
     "sleep": "Sleep",
     "relaxation": "Relaxation",
     "meditation": "Meditation",
     "focus": "Focus",
+    "healing": "Healing",
+    "study": "Study",
+    "chakra": "Chakra",
+    "deep_focus": "Deep Focus",
+    "deep_relaxation": "Deep Relaxation",
+    "deep_mind_clearness": "Deep Mind Clearness",
+    "deep_sleep": "Deep Sleep",
+    "deep_healing": "Deep Healing",
+    "deep_study": "Deep Study",
+    "deep_chakra": "Deep Chakra",
+    "triple_benefit": "Sleep, Study & Focus",
     "ambient": "Ambient",
 }
 
@@ -85,8 +102,5 @@ def generate_metadata_package(
         keywords=sorted(set(keywords)),
         category=context_label,
         language=language,
-        compliance_note=(
-            "Use as ambient or relaxation content. Do not present this asset "
-            "as medical treatment, disease prevention or guaranteed therapy."
-        ),
+        compliance_note=COMPLIANCE_NOTE,
     )

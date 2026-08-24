@@ -9,9 +9,10 @@ from app.db.base import Base
 
 
 class AlbumBatch(Base):
-    """A concept-driven batch of 10 tracks published as one YouTube
-    Playlist ("album"). See app/services/album_pipeline.py for the
-    orchestration that drives this through its stages.
+    """A concept-driven batch of tracks (count set by
+    album_pipeline.TRACKS_PER_ALBUM) published as one YouTube Playlist
+    ("album"). See app/services/album_pipeline.py for the orchestration
+    that drives this through its stages.
     """
 
     __tablename__ = "album_batches"
@@ -45,7 +46,7 @@ class AlbumBatch(Base):
 
 
 class AlbumTrack(Base):
-    """One of an AlbumBatch's 10 tracks, advancing through the pipeline
+    """One of an AlbumBatch's tracks, advancing through the pipeline
     state machine documented in album_pipeline.py.
     """
 

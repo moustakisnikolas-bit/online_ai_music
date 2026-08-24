@@ -2,7 +2,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from app.services.artwork_generator import generate_artwork
+from app.services.artwork_generator import composite_thumbnail_labels, generate_artwork
 
 
 def test_generate_square_artwork(tmp_path: Path) -> None:
@@ -38,3 +38,41 @@ def test_artwork_is_deterministically_named(tmp_path: Path) -> None:
     )
 
     assert first.name == second.name
+
+
+def test_composite_thumbnail_labels_preserves_size_and_format(tmp_path: Path) -> None:
+    path = tmp_path / "photo.png"
+    Image.new("RGB", (1280, 720), (60, 90, 140)).save(path, format="PNG")
+
+    composite_thumbnail_labels(path, headline="FOCUS", subline="432 Hz")
+
+    with Image.open(path) as image:
+        assert image.size == (1280, 720)
+        assert image.format == "PNG"
+
+
+def test_composite_thumbnail_labels_actually_changes_pixels(tmp_path: Path) -> None:
+    path = tmp_path / "photo.png"
+    # Flat mid-grey -- any text/scrim compositing will visibly change
+    # some pixels, so a real change here proves drawing actually
+    # happened, not just that the file was re-saved untouched.
+    Image.new("RGB", (1280, 720), (128, 128, 128)).save(path, format="PNG")
+
+    with Image.open(path) as before:
+        before_pixels = list(before.getdata())
+
+    composite_thumbnail_labels(path, headline="FOCUS", subline="432 Hz")
+
+    with Image.open(path) as after:
+        after_pixels = list(after.getdata())
+
+    assert before_pixels != after_pixels
+
+
+def test_composite_thumbnail_labels_stays_under_youtube_thumbnail_limit(tmp_path: Path) -> None:
+    path = tmp_path / "photo.png"
+    Image.new("RGB", (1280, 720), (60, 90, 140)).save(path, format="PNG")
+
+    composite_thumbnail_labels(path, headline="RELAXATION", subline="396 Hz")
+
+    assert path.stat().st_size < 2 * 1024 * 1024

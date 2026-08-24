@@ -1,6 +1,7 @@
 import uuid
+from datetime import date, datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.models.album import AlbumBatch, AlbumTrack
@@ -61,16 +62,30 @@ def list_album_tracks(db: Session, album_batch_id: uuid.UUID) -> list[AlbumTrack
     return list(db.scalars(statement))
 
 
-def list_actionable_tracks(db: Session, *, limit: int = 20) -> list[AlbumTrack]:
+def list_actionable_tracks(db: Session, *, limit: int = 20, today: date | None = None) -> list[AlbumTrack]:
     # Oldest non-cancelled batch first, then sequence order within a
     # batch -- keeps a batch's tracks progressing together rather than
     # one batch racing ahead while another starves.
+    #
+    # scheduled_upload_date in the future means the upload stage already
+    # found quota exhausted and deferred -- without excluding those here,
+    # such a track (still non-terminal) keeps winning the sequence_index
+    # ordering on every single tick, forever re-running the same losing
+    # quota check and starving every other track in the batch (including
+    # ones that don't need quota at all, like harmony-check or video
+    # render) until quota resets. Once its date arrives, it's picked up
+    # again naturally -- the upload stage still does its own live check,
+    # so this is purely a scheduling fix, not a new gating rule.
+    if today is None:
+        today = datetime.now(timezone.utc).date()
+
     statement = (
         select(AlbumTrack)
         .join(AlbumBatch, AlbumTrack.album_batch_id == AlbumBatch.id)
         .where(
             AlbumTrack.status.not_in(TERMINAL_TRACK_STATUSES),
             AlbumBatch.status.not_in(TERMINAL_BATCH_STATUSES),
+            or_(AlbumTrack.scheduled_upload_date.is_(None), AlbumTrack.scheduled_upload_date <= today),
         )
         .order_by(AlbumBatch.created_at, AlbumTrack.sequence_index)
         .limit(limit)

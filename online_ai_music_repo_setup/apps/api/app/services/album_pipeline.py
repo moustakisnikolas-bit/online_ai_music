@@ -1,4 +1,5 @@
 import logging
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -25,6 +26,12 @@ from app.repositories.albums import (
     update_album_track,
 )
 from app.repositories.audio_jobs import get_audio_job
+from app.repositories.generation_costs import (
+    FLUX_REPLICATE,
+    OPENROUTER_METADATA,
+    record_estimated_cost,
+    record_reported_cost,
+)
 from app.repositories.youtube import (
     create_youtube_publication,
     get_youtube_credential,
@@ -44,8 +51,11 @@ from app.services.album_combinations import (
     render_harmony_preview,
     safe_fallback_combination,
 )
-from app.services.artwork_generator import generate_artwork
+from app.services.ai_artwork_generator import generate_ai_artwork
+from app.services.artwork_generator import PRESETS, composite_thumbnail_labels
 from app.services.audio_generator import generate_audio
+from app.services.llm_metadata_generator import generate_llm_metadata_package
+from app.services.metadata_generator import COMPLIANCE_NOTE
 from app.services.video_renderer import render_static_video
 from app.services.youtube_publisher import (
     add_video_to_playlist,
@@ -58,7 +68,18 @@ logger = logging.getLogger(__name__)
 
 # Real album tracks; harmony-check previews are short and cheap, gated
 # separately by album_combinations._PREVIEW_DURATION_SECONDS.
-TRACK_DURATION_SECONDS = 3600
+#
+# 14:55, not 15:00 or 60:00 -- YouTube blocks uploads over 15 minutes for
+# accounts that haven't gone through its longer-video verification, and
+# a real batch actually hit this (5 real 1-hour uploads got rejected).
+# 895s keeps a safety margin under the exact 900s cutoff rather than
+# riding the line.
+TRACK_DURATION_SECONDS = 14 * 60 + 55
+# Single source of truth for how many tracks a new album batch gets --
+# every other reference (docs, UI progress display) reads the real
+# track_summary/track count from the API rather than hardcoding this
+# number, so it never drifts out of sync with this value again.
+TRACKS_PER_ALBUM = 5
 MAX_HARMONY_ATTEMPTS = 3
 
 VIDEO_DIR = Path("data/generated/video")
@@ -88,6 +109,9 @@ def _combination_to_dict(combination: TrackCombination) -> dict:
         "tone_gain": combination.tone_gain,
         "noise_type": combination.noise_type.value,
         "noise_gain": combination.noise_gain,
+        "brainwave_band": combination.brainwave_band,
+        "brainwave_technique": combination.brainwave_technique,
+        "brainwave_pulse_hz": combination.brainwave_pulse_hz,
     }
 
 
@@ -112,6 +136,12 @@ def _combination_from_dict(data: dict) -> TrackCombination:
         tone_gain=data["tone_gain"],
         noise_type=AudioMode(data["noise_type"]),
         noise_gain=data["noise_gain"],
+        # .get(...) not [...] -- combinations persisted before this field
+        # existed don't have these keys; treat that as "no brainwave
+        # layer" rather than a KeyError.
+        brainwave_band=data.get("brainwave_band"),
+        brainwave_technique=data.get("brainwave_technique"),
+        brainwave_pulse_hz=data.get("brainwave_pulse_hz"),
     )
 
 
@@ -129,11 +159,11 @@ def create_album_batch(
 
     batch = _insert_album_batch(db, concept_id=concept_id, title=batch_title)
 
-    combinations = generate_candidate_combinations(concept_id, count=10, seed=seed)
-    # A too-small real+fallback pool could return fewer than 10 unique
-    # combinations -- pad with the safe fallback rather than short an
-    # album, since the fallback is guaranteed valid.
-    while len(combinations) < 10:
+    combinations = generate_candidate_combinations(concept_id, count=TRACKS_PER_ALBUM, seed=seed)
+    # A too-small real+fallback pool could return fewer than
+    # TRACKS_PER_ALBUM unique combinations -- pad with the safe fallback
+    # rather than short an album, since the fallback is guaranteed valid.
+    while len(combinations) < TRACKS_PER_ALBUM:
         combinations.append(safe_fallback_combination(concept_id))
 
     for index, combination in enumerate(combinations):
@@ -141,7 +171,7 @@ def create_album_batch(
             db,
             album_batch_id=batch.id,
             sequence_index=index,
-            title=f"{batch_title} - Track {index + 1}",
+            title=_track_title(concept, combination),
             combination=_combination_to_dict(combination),
         )
 
@@ -265,28 +295,90 @@ def _run_full_render_stage(db: Session, track: AlbumTrack) -> None:
     update_album_track(db, track, status="audio_rendered", audio_job_id=audio_job.id)
 
 
-def _ensure_concept_artwork(concept_id: str) -> str:
-    # One shared, procedural (free, instant) artwork per concept, cached
-    # to disk -- not per-track, which would multiply a real cost (or at
-    # minimum real render time) by 10 for no real benefit, since all 10
-    # tracks in an album are the same concept.
-    concept = get_concept(concept_id)
-    filename = f"album-{concept_id}.png"
+def _natural_sound_description(natural_sound: NaturalSoundChoice) -> str:
+    raw = natural_sound.sample_id or (
+        natural_sound.texture_type.value if natural_sound.texture_type else "ambient"
+    )
+    # Sample-library filenames carry recording-source suffixes (e.g.
+    # "ocean-waves-fs-01") that read fine as an id but not as a prompt
+    # phrase -- strip those and turn separators into spaces so the AI
+    # prompt gets "ocean waves", not "ocean-waves-fs-01".
+    cleaned = re.sub(r"-fs-\d+$", "", raw)
+    return cleaned.replace("-", " ").replace("_", " ")
+
+
+def _track_title(concept, combination: TrackCombination) -> str:
+    # Descriptive, SEO-relevant title built from this track's own real
+    # combination data (concept + natural sound + noise type + Hz) --
+    # same source data as the artwork prompt and thumbnail Hz label, so
+    # title/thumbnail/audio never disagree about what the track actually
+    # is. Replaces the old generic "Album Title - Track N".
+    natural_sound_desc = _natural_sound_description(combination.natural_sound).title()
+    noise_desc = combination.noise_type.value.replace("_", " ").title()
+    return f"{concept.label} - {natural_sound_desc} & {noise_desc} - {combination.tone_hz:g}Hz"
+
+
+def _track_artwork_prompt(concept, combination: TrackCombination) -> str:
+    purpose = get_purpose(concept.purpose_id)
+    natural_sound_desc = _natural_sound_description(combination.natural_sound)
+    noise_desc = combination.noise_type.value.replace("_", " ")
+    melody_phrase = (
+        f", a faint {combination.melody_instrument.replace('_', ' ')} melody drifting through"
+        if combination.melody_instrument
+        else ""
+    )
+    return (
+        f"Photorealistic, high-detail photo evoking {natural_sound_desc}, capturing the "
+        f"feeling of {concept.label.lower()}: {purpose.description.lower()} A subtle "
+        f"{noise_desc} atmosphere{melody_phrase}. Calm, soothing, cinematic lighting, "
+        f"vibrant natural colors, no text or typography in the image."
+    )
+
+
+def _ensure_track_artwork(db: Session, track: AlbumTrack, batch: AlbumBatch) -> str:
+    # One real, unique AI photo per track (not shared across the album)
+    # so each of the 10 thumbnails actually reflects that track's own
+    # natural sound/melody/noise combination instead of one generic
+    # concept image repeated ten times. Replicate only, deliberately --
+    # not a provider-selectable path like the manual artwork route, per
+    # an explicit choice to keep album artwork on one provider. The
+    # concept name and Hz value are composited on afterward as real
+    # text (see composite_thumbnail_labels), not asked of the AI model,
+    # which renders text unreliably.
+    concept = get_concept(batch.concept_id)
+    combination = _combination_from_dict(track.combination)
+    filename = f"track-{track.id}.png"
     target_path = ARTWORK_DIR / filename
 
     if target_path.exists():
         return filename
 
-    generated_path = generate_artwork(
-        title=concept.label,
-        subtitle="AION Album",
-        preset_name="youtube-thumbnail",
-        output_dir=ARTWORK_DIR,
-        seed=abs(hash(concept_id)) % 65536,
+    preset = PRESETS["youtube-thumbnail"]
+    result = generate_ai_artwork(
+        _track_artwork_prompt(concept, combination),
+        output_path=target_path,
+        provider="replicate",
+        width=preset.width,
+        height=preset.height,
+        seed=abs(hash(str(track.id))) % 65536,
+        db=db,
     )
 
-    if generated_path != target_path:
-        generated_path.replace(target_path)
+    record_estimated_cost(
+        db,
+        kind=FLUX_REPLICATE,
+        estimate_usd=get_settings().flux_replicate_cost_usd,
+        reference=filename,
+    )
+
+    if result.path != target_path:
+        result.path.replace(target_path)
+
+    composite_thumbnail_labels(
+        target_path,
+        headline=concept.label.upper(),
+        subline=f"{combination.tone_hz:g} Hz",
+    )
 
     return filename
 
@@ -295,7 +387,7 @@ def _run_video_render_stage(db: Session, track: AlbumTrack) -> None:
     audio_job = get_audio_job(db, track.audio_job_id)
     audio_filename = Path(audio_job.output_file_path).name
     batch = get_album_batch(db, track.album_batch_id)
-    artwork_filename = _ensure_concept_artwork(batch.concept_id)
+    artwork_filename = _ensure_track_artwork(db, track, batch)
     output_filename = f"{track.id}.mp4"
 
     render_static_video(
@@ -314,6 +406,148 @@ def _run_video_render_stage(db: Session, track: AlbumTrack) -> None:
         video_filename=output_filename,
         artwork_filename=artwork_filename,
     )
+
+
+_DESCRIPTION_MIN_CHARS = 300
+_DESCRIPTION_MAX_CHARS = 400
+
+# One curiosity-driven opener per concept, grounded in what that concept
+# actually is (not generic ad copy) -- the "intrigue viewers to click"
+# hook the rest of the description builds on.
+_DESCRIPTION_HOOKS: dict[str, str] = {
+    "focus": "Ever wondered what real deep work actually sounds like?",
+    "relaxation": "Feel the tension start to let go before the first minute is up.",
+    "mind_clearness": "Clear the mental fog in minutes, not hours.",
+    "sleep": "The last thing you'll remember before drifting off.",
+    "healing": "One old frequency, one very modern kind of stillness.",
+    "study": "The soundtrack focused students swear by.",
+    "chakra": "Seven energy centers, one frequency at a time.",
+    "deep_focus": "Not just focus -- the kind that makes hours disappear.",
+    "deep_relaxation": "Past relaxed. All the way to still.",
+    "deep_mind_clearness": "The fog doesn't just lift here -- it stays gone.",
+    "deep_sleep": "For the nights when 'tired' isn't cutting it anymore.",
+    "deep_healing": "The frequency real listeners come back to on their hardest days.",
+    "deep_study": "Built for the session that has to actually work.",
+    "deep_chakra": "All seven centers, taken further than the usual pass.",
+    "triple_benefit": "One soundscape, three real jobs: fall asleep, cram, or just focus.",
+}
+
+# Appended one at a time only until the description clears
+# _DESCRIPTION_MIN_CHARS -- keeps short natural-sound/Hz combinations
+# from shipping an under-length description without padding every
+# track with all of them regardless of length.
+_DESCRIPTION_FILLERS = (
+    " No lyrics, no ads mid-track -- just one continuous, real soundscape from AION.",
+    " Built for headphones, but honest enough to hold up on speakers too.",
+    " Give it two minutes and notice how hard it is to tell where the tone ends and the room begins.",
+    " Every layer here is real audio, not a loop you'll notice repeating.",
+)
+
+
+def _pad_description(description: str) -> str:
+    for filler in _DESCRIPTION_FILLERS:
+        if len(description) >= _DESCRIPTION_MIN_CHARS:
+            break
+        description += filler
+    return description
+
+
+def _clamp_description(description: str) -> str:
+    if len(description) <= _DESCRIPTION_MAX_CHARS:
+        return description
+
+    truncated = description[:_DESCRIPTION_MAX_CHARS]
+    last_period = truncated.rfind(". ")
+    if last_period > _DESCRIPTION_MIN_CHARS - 50:
+        return truncated[: last_period + 1]
+    return truncated.rsplit(" ", 1)[0] + "."
+
+
+def _finalize_description(description: str) -> str:
+    # Applied to both the LLM-generated description (whose exact length
+    # the prompt can request but not guarantee) and the deterministic
+    # fallback below, so 300-400 chars holds regardless of which path
+    # produced it.
+    return _clamp_description(_pad_description(description))
+
+
+def _track_description(concept, combination: TrackCombination) -> str:
+    """A deterministic, no-LLM-required description sized to the
+    300-400 char range -- built from this track's own real attributes
+    (natural sound, Hz, noise color), not generic boilerplate, so it
+    still reads as written for this specific track when OpenRouter
+    isn't configured.
+    """
+    natural = _natural_sound_description(combination.natural_sound)
+    noise_label = combination.noise_type.value.replace("_", " ")
+    hook = _DESCRIPTION_HOOKS.get(concept.id, "Press play and notice what changes.")
+
+    description = (
+        f"{hook} This {concept.label} soundscape layers real {natural} with a "
+        f"steady {combination.tone_hz:g}Hz tone and soft {noise_label} underneath."
+    )
+    return _finalize_description(description)
+
+
+def _hashtags_from_title(title: str) -> list[str]:
+    """Turns a track's own descriptive title into real hashtags, e.g.
+    "Chakra - Owl Night Forest & Violet Noise - 417Hz" becomes
+    ["#Chakra", "#OwlNightForest", "#VioletNoise", "#417Hz"] -- reuses
+    the title's own words rather than a separate hashtag vocabulary, so
+    the hashtags always match what the video is actually titled.
+    """
+    hashtags = []
+    for segment in re.split(r"[-&]", title):
+        cleaned = re.sub(r"[^A-Za-z0-9]+", "", segment)
+        if cleaned:
+            hashtags.append(f"#{cleaned}")
+    return hashtags
+
+
+def _track_upload_metadata(
+    db: Session, *, concept, batch: AlbumBatch, track: AlbumTrack, combination: TrackCombination
+) -> tuple[str, list[str]]:
+    """Real, per-track SEO description/tags via the LLM metadata
+    generator when OpenRouter is configured; a deterministic per-track
+    description otherwise. An LLM failure (no key configured, bad
+    response, network error) falls back rather than failing the whole
+    upload over what's ultimately a nice-to-have, not a required step.
+    Both paths get the same 300-400 char clamp and the same
+    title-derived hashtags appended, in the description text and the
+    tags list.
+    """
+    hashtags = _hashtags_from_title(track.title)
+    hashtag_words = [tag.lstrip("#") for tag in hashtags]
+    hashtag_line = " ".join(hashtags)
+
+    try:
+        package, cost_usd = generate_llm_metadata_package(
+            source_title=track.title,
+            mode="mixed_ambient",
+            duration_seconds=TRACK_DURATION_SECONDS,
+            db=db,
+            context=concept.id,
+            frequency_hz=combination.tone_hz,
+            texture_mode=combination.noise_type.value,
+        )
+    except Exception:  # noqa: BLE001 -- optional enhancement, must never block a real upload
+        logger.warning(
+            "LLM metadata generation failed for track %s, using fallback description/tags",
+            track.id,
+            exc_info=True,
+        )
+        fallback_description = _track_description(concept, combination)
+        description = f"{fallback_description}\n\n{COMPLIANCE_NOTE}\n\n{hashtag_line}"
+        tags = ["ambient", "soundscape", concept.id, *hashtag_words]
+        return description, tags
+
+    record_reported_cost(db, kind=OPENROUTER_METADATA, reported_usd=cost_usd, reference=str(track.id))
+
+    description = f"{_finalize_description(package.description)}\n\n{package.compliance_note}\n\n{hashtag_line}"
+    # Dedup while preserving order (LLM keywords first, base tags as a
+    # findability floor) -- a plain set() would make tag order random.
+    tags = list(dict.fromkeys([*package.keywords, "ambient", concept.id, *hashtag_words]))
+    return description, tags
 
 
 def _run_upload_stage(db: Session, track: AlbumTrack) -> None:
@@ -335,6 +569,7 @@ def _run_upload_stage(db: Session, track: AlbumTrack) -> None:
 
     batch = get_album_batch(db, track.album_batch_id)
     concept = get_concept(batch.concept_id)
+    combination = _combination_from_dict(track.combination)
     video_path = (VIDEO_DIR / track.video_filename).resolve()
 
     publication = create_youtube_publication(
@@ -344,19 +579,23 @@ def _run_upload_stage(db: Session, track: AlbumTrack) -> None:
         title=track.title,
     )
 
+    description, tags = _track_upload_metadata(
+        db, concept=concept, batch=batch, track=track, combination=combination
+    )
+
     try:
         credentials = credentials_from_stored(credential, db=db)
         video_id, video_url = upload_video(
             credentials,
             video_path=video_path,
             title=track.title,
-            description=(
-                f"Part of the {batch.title} album -- {concept.label} ambient soundscape, "
-                "generated by AION."
-            ),
-            tags=["ambient", "soundscape", concept.id],
+            description=description,
+            tags=tags,
             category_id="10",
-            privacy_status="private",
+            # Public, not private -- the entire point of this pipeline is
+            # real views on real published content; a private upload is
+            # invisible to search/browse and defeats that.
+            privacy_status="public",
         )
     except Exception as exc:
         mark_publication_failed(db, publication, error_message=str(exc))
@@ -473,7 +712,7 @@ def run_album_worker_tick(db: Session) -> None:
     # only delays that call's return, not a batch of unrelated work, and
     # the driving while-loop (apps/worker/app/album_worker.py) naturally
     # re-visits every other track on its next tick.
-    tracks = list_actionable_tracks(db, limit=1)
+    tracks = list_actionable_tracks(db, limit=1, today=today_pacific())
 
     if not tracks:
         return

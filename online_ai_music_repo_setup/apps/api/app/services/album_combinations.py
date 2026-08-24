@@ -23,6 +23,24 @@ _NOISE_GAIN_RANGE = (0.30, 0.40)
 # which combination gets picked.
 _MELODY_ROOT_NOTES = ("C3", "D3", "E3", "G3", "A3", "C4")
 
+# Real EEG frequency-band ranges (distinct from the folklore-adjacent
+# Solfeggio Hz values elsewhere in this module) -- delta/gamma
+# deliberately excluded, not requested.
+BRAINWAVE_BAND_RANGES: dict[str, tuple[float, float]] = {
+    "theta": (4.0, 8.0),
+    "alpha": (8.0, 13.0),
+    "beta": (13.0, 30.0),
+}
+_BRAINWAVE_TECHNIQUES = ("binaural", "isochronic")
+# A concept's tone_hz is chosen first, independently of the brainwave
+# roll below -- if it lands under this floor, no brainwave layer is
+# added for that candidate (real finding: a continuous tone under
+# ~150Hz reliably trips the harmony check's low-frequency-buildup
+# detector, and a binaural pair splits that same carrier even lower on
+# one side, e.g. carrier 174Hz - beta/2 15Hz = 159Hz -- still fine, but
+# carrier 111Hz would not be).
+_BRAINWAVE_MIN_CARRIER_HZ = 150.0
+
 _PREVIEW_DURATION_SECONDS = 45
 _PREVIEW_SAMPLE_RATE = 44100
 
@@ -46,6 +64,12 @@ class TrackCombination:
     tone_gain: float
     noise_type: AudioMode
     noise_gain: float
+    # None means the plain, single continuous tone_hz layer (the original
+    # behavior). "binaural"/"isochronic" replace that layer -- see
+    # to_ambient_layers() -- rather than adding a competing extra tone.
+    brainwave_band: str | None = None
+    brainwave_technique: str | None = None
+    brainwave_pulse_hz: float | None = None
 
     def signature(self) -> str:
         # Identifies the *categorical* choice (not the randomized gains),
@@ -55,7 +79,10 @@ class TrackCombination:
         # relationships, not gain, so re-rolling gains alone would fail
         # identically.
         natural = self.natural_sound.sample_id or self.natural_sound.texture_type
-        return f"{natural}|{self.melody_instrument}|{self.tone_hz}|{self.noise_type}"
+        return (
+            f"{natural}|{self.melody_instrument}|{self.tone_hz}|{self.noise_type}|"
+            f"{self.brainwave_band}|{self.brainwave_technique}"
+        )
 
     def melody_root_note_hz(self) -> float | None:
         if self.melody_root_note is None:
@@ -94,7 +121,37 @@ class TrackCombination:
                 }
             )
 
-        layers.append({"kind": "tone", "frequency_hz": self.tone_hz, "gain": self.tone_gain})
+        if self.brainwave_technique == "binaural":
+            half_beat = self.brainwave_pulse_hz / 2.0
+            layers.append(
+                {
+                    "kind": "binaural_tone",
+                    "left_frequency_hz": self.tone_hz - half_beat,
+                    "right_frequency_hz": self.tone_hz + half_beat,
+                    "gain": self.tone_gain,
+                }
+            )
+        elif self.brainwave_technique == "isochronic":
+            layers.append(
+                {
+                    "kind": "isochronic",
+                    "carrier_frequency_hz": self.tone_hz,
+                    "pulse_frequency_hz": self.brainwave_pulse_hz,
+                    # Real finding: full depth (1.0, the schema default)
+                    # pulses all the way down to near-silence and back,
+                    # which the harmony check's "sudden loudness jump"
+                    # detector (correctly) flags every time over a 45s
+                    # window -- that's an inherent property of a deep
+                    # isochronic pulse, not a bug in the detector. A more
+                    # moderate depth keeps a real, audible pulse without
+                    # tripping it.
+                    "modulation_depth": 0.6,
+                    "gain": self.tone_gain,
+                }
+            )
+        else:
+            layers.append({"kind": "tone", "frequency_hz": self.tone_hz, "gain": self.tone_gain})
+
         layers.append({"kind": "noise", "noise_type": self.noise_type, "gain": self.noise_gain})
 
         return layers
@@ -177,6 +234,18 @@ def generate_candidate_combinations(
         else:
             melody_instrument = melody_scale = melody_root_note = None
 
+        brainwave_band = brainwave_technique = None
+        brainwave_pulse_hz = None
+        if (
+            concept.brainwave_bands
+            and tone_hz >= _BRAINWAVE_MIN_CARRIER_HZ
+            and rng.random() < concept.brainwave_layer_probability
+        ):
+            brainwave_band = rng.choice(concept.brainwave_bands)
+            brainwave_technique = rng.choice(_BRAINWAVE_TECHNIQUES)
+            band_low, band_high = BRAINWAVE_BAND_RANGES[brainwave_band]
+            brainwave_pulse_hz = rng.uniform(band_low, band_high)
+
         combination = TrackCombination(
             natural_sound=natural,
             natural_sound_gain=rng.uniform(*_NATURAL_SOUND_GAIN_RANGE),
@@ -188,6 +257,9 @@ def generate_candidate_combinations(
             tone_gain=rng.uniform(*_TONE_GAIN_RANGE),
             noise_type=noise_type,
             noise_gain=rng.uniform(*_NOISE_GAIN_RANGE),
+            brainwave_band=brainwave_band,
+            brainwave_technique=brainwave_technique,
+            brainwave_pulse_hz=brainwave_pulse_hz,
         )
 
         signature = combination.signature()

@@ -48,20 +48,35 @@ class _FakeInsertRequest:
         return None, self._response
 
 
+class _FakeDeleteRequest:
+    def __init__(self, calls: list[str], video_id: str) -> None:
+        self._calls = calls
+        self._video_id = video_id
+
+    def execute(self):
+        self._calls.append(self._video_id)
+        return None
+
+
 class _FakeVideosResource:
-    def __init__(self, response: dict) -> None:
+    def __init__(self, response: dict, delete_calls: list[str] | None = None) -> None:
         self._response = response
+        self._delete_calls = delete_calls if delete_calls is not None else []
 
     def insert(self, **_kwargs):
         return _FakeInsertRequest(self._response)
 
+    def delete(self, *, id):  # noqa: A002 -- matches the real googleapiclient method's kwarg name
+        return _FakeDeleteRequest(self._delete_calls, id)
+
 
 class _FakeYouTubeService:
-    def __init__(self, response: dict) -> None:
+    def __init__(self, response: dict | None = None, delete_calls: list[str] | None = None) -> None:
         self._response = response
+        self._delete_calls = delete_calls if delete_calls is not None else []
 
     def videos(self):
-        return _FakeVideosResource(self._response)
+        return _FakeVideosResource(self._response, self._delete_calls)
 
 
 class _FakeChannelsResource:
@@ -81,6 +96,40 @@ class _FakeChannelsService:
 
     def channels(self):
         return _FakeChannelsResource(self._items)
+
+
+class _FakeSearchResource:
+    def __init__(self, items: list[dict]) -> None:
+        self._items = items
+
+    def list(self, **_kwargs):
+        return self
+
+    def execute(self):
+        return {"items": self._items}
+
+
+class _FakeVideoStatsResource:
+    def __init__(self, items: list[dict]) -> None:
+        self._items = items
+
+    def list(self, **_kwargs):
+        return self
+
+    def execute(self):
+        return {"items": self._items}
+
+
+class _FakeSearchService:
+    def __init__(self, search_items: list[dict], stats_items: list[dict]) -> None:
+        self._search_items = search_items
+        self._stats_items = stats_items
+
+    def search(self):
+        return _FakeSearchResource(self._search_items)
+
+    def videos(self):
+        return _FakeVideoStatsResource(self._stats_items)
 
 
 class _FakeSetThumbnailRequest:
@@ -174,6 +223,43 @@ def test_scopes_cover_playlists_false_for_narrow_legacy_scopes() -> None:
 def test_scopes_cover_playlists_false_for_none_or_empty() -> None:
     assert youtube_publisher.scopes_cover_playlists(None) is False
     assert youtube_publisher.scopes_cover_playlists([]) is False
+
+
+def test_importing_youtube_publisher_relaxes_oauthlib_token_scope_check() -> None:
+    import os
+
+    assert os.environ.get("OAUTHLIB_RELAX_TOKEN_SCOPE") == "1"
+
+
+def test_incremental_authorization_scope_mismatch_no_longer_raises(monkeypatch) -> None:
+    # Real reproduction of the actual bug: Google's incremental
+    # authorization (include_granted_scopes="true") returns a token whose
+    # granted scope is the union of every scope ever approved for this
+    # app, not just the single scope this Flow requested -- which is
+    # exactly what a re-authorization for playlist support does. Confirm
+    # oauthlib's own scope-mismatch parser, called directly (not through
+    # our wrapper), no longer raises once youtube_publisher has been
+    # imported -- this is what turned every real re-auth attempt into a
+    # 500 before the fix.
+    from oauthlib.oauth2.rfc6749.parameters import parse_token_response
+
+    requested_scope = "https://www.googleapis.com/auth/youtube"
+    granted_scope = (
+        "https://www.googleapis.com/auth/youtube.upload "
+        "https://www.googleapis.com/auth/youtube.readonly "
+        "https://www.googleapis.com/auth/youtube"
+    )
+    body = (
+        '{"access_token": "fake-token", "token_type": "Bearer", '
+        f'"expires_in": 3600, "scope": "{granted_scope}"}}'
+    )
+
+    # No env var manipulation here -- relies on the real side effect of
+    # importing youtube_publisher (already imported at module load
+    # above), same as what actually happens in the running app.
+    token = parse_token_response(body, scope=requested_scope)
+
+    assert token["access_token"] == "fake-token"
 
 
 def test_create_playlist_returns_id_and_url(monkeypatch) -> None:
@@ -324,6 +410,16 @@ def test_set_video_thumbnail_raises_for_missing_file(tmp_path) -> None:
         )
 
 
+def test_delete_video_calls_videos_delete(monkeypatch) -> None:
+    delete_calls: list[str] = []
+    fake_service = _FakeYouTubeService(delete_calls=delete_calls)
+    monkeypatch.setattr(youtube_publisher, "build", lambda *a, **k: fake_service)
+
+    youtube_publisher.delete_video(object(), video_id="abc123")
+
+    assert delete_calls == ["abc123"]
+
+
 def test_credentials_from_stored_decrypts_tokens(monkeypatch, db) -> None:
     from cryptography.fernet import Fernet
 
@@ -371,3 +467,48 @@ def test_youtube_upload_request_defaults_to_private() -> None:
     )
 
     assert request.privacy_status == "private"
+
+
+def test_search_top_videos_combines_search_results_with_real_view_counts(monkeypatch) -> None:
+    search_items = [
+        {
+            "id": {"videoId": "vid1"},
+            "snippet": {"title": "432Hz Focus Music - Brown Noise", "channelTitle": "Channel A"},
+        },
+        {
+            "id": {"videoId": "vid2"},
+            "snippet": {"title": "528Hz Deep Focus - Rain Sounds", "channelTitle": "Channel B"},
+        },
+    ]
+    stats_items = [
+        {
+            "id": "vid1",
+            "statistics": {"viewCount": "1500000"},
+            "contentDetails": {"duration": "PT10H"},
+        },
+        {
+            "id": "vid2",
+            "statistics": {"viewCount": "900000"},
+            "contentDetails": {"duration": "PT1H"},
+        },
+    ]
+    fake_service = _FakeSearchService(search_items, stats_items)
+    monkeypatch.setattr(youtube_publisher, "build", lambda *a, **k: fake_service)
+
+    results = youtube_publisher.search_top_videos(object(), query="432hz focus music", max_results=10)
+
+    assert len(results) == 2
+    assert results[0]["video_id"] == "vid1"
+    assert results[0]["title"] == "432Hz Focus Music - Brown Noise"
+    assert results[0]["view_count"] == 1500000
+    assert results[0]["duration"] == "PT10H"
+    assert results[1]["view_count"] == 900000
+
+
+def test_search_top_videos_returns_empty_list_for_no_results(monkeypatch) -> None:
+    fake_service = _FakeSearchService([], [])
+    monkeypatch.setattr(youtube_publisher, "build", lambda *a, **k: fake_service)
+
+    results = youtube_publisher.search_top_videos(object(), query="a query with no results")
+
+    assert results == []

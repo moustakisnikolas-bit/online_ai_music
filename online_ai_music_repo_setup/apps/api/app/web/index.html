@@ -400,7 +400,7 @@
 
     .album-track-grid {
       display: grid;
-      grid-template-columns: repeat(10, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(12px, 1fr));
       gap: 6px;
     }
 
@@ -583,6 +583,127 @@
     .library-card-delete:hover {
       border-color: #da3633;
       color: #ff7b72;
+    }
+
+    /* ---- Library list view (alternative to the card grid above) ---- */
+    .view-toggle {
+      display: inline-flex;
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .view-toggle-btn {
+      border: none;
+      border-radius: 0;
+      background: var(--bg-elevated);
+      padding: 7px 14px;
+      font-size: .85rem;
+      color: var(--text-secondary);
+    }
+
+    .view-toggle-btn.active {
+      background: var(--accent-secondary);
+      color: #fff;
+    }
+
+    .library-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .library-list-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: var(--bg-elevated);
+      border-radius: 8px;
+      padding: 10px 14px;
+      transition: background .15s ease;
+    }
+
+    .library-list-row:hover {
+      background: var(--bg-highlight);
+    }
+
+    .library-list-row.selected {
+      outline: 2px solid var(--accent-secondary);
+      outline-offset: 2px;
+    }
+
+    .library-list-row .library-card-select {
+      position: static;
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .library-list-cover {
+      width: 44px;
+      height: 44px;
+      border-radius: 6px;
+      flex-shrink: 0;
+    }
+
+    .library-list-play {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      padding: 0;
+      flex-shrink: 0;
+    }
+
+    .library-list-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .library-list-title {
+      font-weight: 700;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .library-list-meta {
+      color: var(--text-secondary);
+      font-size: .8rem;
+    }
+
+    .library-list-badges {
+      display: flex;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    /* The part the user specifically asked for: actions live on the
+       side (right edge of the row) in list view, not stacked below the
+       content like in the card grid. */
+    .library-list-actions {
+      display: flex;
+      gap: 8px;
+      flex-shrink: 0;
+      margin-left: auto;
+    }
+
+    .library-list-actions button {
+      padding: 7px 12px;
+      font-size: .85rem;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 720px) {
+      .library-list-row {
+        flex-wrap: wrap;
+      }
+
+      .library-list-actions {
+        margin-left: 0;
+        width: 100%;
+      }
     }
 
     #layer-volumes-panel {
@@ -1317,11 +1438,11 @@
   <section class="panel">
     <h2>Generate a new album</h2>
     <p class="subtitle">
-      Pick a concept and AION will pick 10 natural sound + melody + Hz +
-      noise combinations, quality-check each one, render 10 full 1-hour
-      tracks, and publish them to your connected YouTube channel as a
-      playlist -- paced automatically to stay within YouTube's daily
-      upload quota.
+      Pick a concept and AION will pick 5 natural sound + melody + Hz +
+      noise combinations, quality-check each one, render 5 tracks
+      (~15 minutes each), and publish them to your connected YouTube
+      channel as a playlist -- paced automatically to stay within
+      YouTube's daily upload quota.
     </p>
 
     <div class="grid">
@@ -1335,12 +1456,35 @@
       </label>
     </div>
 
+    <div id="album-concept-specs" class="subtitle mono"></div>
+
     <div class="actions">
       <button type="button" id="album-generate-btn">Generate Album</button>
       <span id="album-generate-status" class="status"></span>
     </div>
 
     <div id="album-quota-widget" class="notice hidden"></div>
+    <div id="album-youtube-connection-widget" class="notice hidden">
+      <span id="album-youtube-connection-status"></span>
+      <button type="button" id="album-youtube-reconnect-btn" class="secondary hidden">Reconnect YouTube</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Concept research</h2>
+    <p class="subtitle">
+      Real top-performing YouTube videos in this concept's niche --
+      what Hz, noise type, and themes actually rank, pulled from a
+      real YouTube search (costs API quota, so it's on-demand, not
+      automatic).
+    </p>
+
+    <div class="actions">
+      <button type="button" id="album-research-btn" class="secondary">Research this concept</button>
+      <span id="album-research-status" class="status"></span>
+    </div>
+
+    <div id="album-research-panel"></div>
   </section>
 
   <section class="panel">
@@ -1373,6 +1517,10 @@
     <div class="actions">
       <button id="refresh-library" class="secondary">Refresh library</button>
       <button id="bulk-delete-btn" class="warning hidden" type="button">Delete selected (0)</button>
+      <span class="view-toggle">
+        <button type="button" id="library-view-grid" class="view-toggle-btn" data-view-mode="grid">Grid</button>
+        <button type="button" id="library-view-list" class="view-toggle-btn" data-view-mode="list">List</button>
+      </span>
       <span id="library-status" class="status"></span>
     </div>
 
@@ -2515,6 +2663,43 @@
     return card;
   }
 
+  // Same interactive classes (play-btn, approve-btn, reject-btn,
+  // publish-youtube-btn, delete-btn, library-card-select) as
+  // renderLibraryRow -- only the layout differs, so loadLibrary()'s
+  // existing event-wiring loop works unchanged for either render mode.
+  function renderLibraryListRow(job) {
+    const row = document.createElement("div");
+    row.className = "library-list-row";
+
+    const statusBadge = `<span class="badge badge-${escapeHtml(job.status)}">${escapeHtml(job.status)}</span>`;
+    const reviewBadge = `<span class="badge badge-${escapeHtml(job.review_status)}">${escapeHtml(job.review_status)}</span>`;
+
+    const canReview = job.status === "completed" && job.review_status === "pending";
+    const canPublish = job.status === "completed" && job.review_status === "approved";
+    const cover = coverGradientFor(job.id || job.title);
+
+    row.innerHTML = `
+      <input type="checkbox" class="library-card-select" data-job-id="${escapeHtml(job.id)}" aria-label="Select ${escapeHtml(job.title)}">
+      <div class="library-list-cover" style="background: ${cover};"></div>
+      ${job.filename ? `<button type="button" class="play-btn library-list-play" data-filename="${escapeHtml(job.filename)}" data-title="${escapeHtml(job.title)}">▶</button>` : '<span class="library-list-play"></span>'}
+      <div class="library-list-info">
+        <div class="library-list-title">${escapeHtml(job.title)}</div>
+        <div class="library-list-meta">
+          ${escapeHtml(job.mode)} · ${formatDuration(job.duration_seconds)} · ${escapeHtml(job.channels)}
+        </div>
+      </div>
+      <div class="library-list-badges">${statusBadge} ${reviewBadge}</div>
+      <div class="library-list-actions">
+        ${canReview ? `<button type="button" class="approve-btn" data-job-id="${escapeHtml(job.id)}">Approve</button>` : ""}
+        ${canReview ? `<button type="button" class="warning reject-btn" data-job-id="${escapeHtml(job.id)}">Reject</button>` : ""}
+        ${canPublish ? `<button type="button" class="publish-youtube-btn" data-job-id="${escapeHtml(job.id)}" data-job-title="${escapeHtml(job.title)}">Publish to YouTube</button>` : ""}
+        <button type="button" class="delete-btn" data-job-id="${escapeHtml(job.id)}">Delete</button>
+      </div>
+    `;
+
+    return row;
+  }
+
   async function reviewJob(jobId, decision) {
     await jsonRequest(
       `/api/v1/audio/jobs/${jobId}/${decision}`,
@@ -2654,64 +2839,89 @@
 
   document.getElementById("bulk-delete-btn").addEventListener("click", bulkDeleteSelected);
 
-  async function loadLibrary() {
-    const libraryStatus = document.getElementById("library-status");
+  // Persisted so the choice survives a page reload, not just re-renders
+  // within one session.
+  let libraryViewMode = localStorage.getItem("libraryViewMode") === "list" ? "list" : "grid";
+  let lastLoadedJobs = [];
+
+  function setLibraryViewMode(mode) {
+    libraryViewMode = mode;
+    localStorage.setItem("libraryViewMode", mode);
+    document.querySelectorAll(".view-toggle-btn").forEach((button) => {
+      button.classList.toggle("active", button.dataset.viewMode === mode);
+    });
+    renderLibraryItems(lastLoadedJobs);
+  }
+
+  document.getElementById("library-view-grid").addEventListener("click", () => setLibraryViewMode("grid"));
+  document.getElementById("library-view-list").addEventListener("click", () => setLibraryViewMode("list"));
+
+  function renderLibraryItems(jobs) {
     const list = document.getElementById("library-list");
-    libraryStatus.textContent = "Loading…";
+    list.className = libraryViewMode === "list" ? "library-list" : "library-grid";
+    list.innerHTML = "";
     selectedJobIds.clear();
     updateBulkDeleteButton();
 
-    try {
-      const jobs = await jsonRequest("/api/v1/audio/jobs?limit=50");
-      list.innerHTML = "";
+    if (jobs.length === 0) {
+      list.innerHTML = '<p class="library-empty">No tracks generated yet.</p>';
+      return;
+    }
 
-      if (jobs.length === 0) {
-        list.innerHTML = '<p class="library-empty">No tracks generated yet.</p>';
-      } else {
-        for (const job of jobs) {
-          list.appendChild(renderLibraryRow(job));
+    const renderItem = libraryViewMode === "list" ? renderLibraryListRow : renderLibraryRow;
+    for (const job of jobs) {
+      list.appendChild(renderItem(job));
+    }
+
+    list.querySelectorAll(".play-btn").forEach((button) => {
+      button.addEventListener("click", () => playTrack(button.dataset.filename, button.dataset.title));
+    });
+
+    list.querySelectorAll(".approve-btn").forEach((button) => {
+      button.addEventListener("click", () => reviewJob(button.dataset.jobId, "approve"));
+    });
+
+    list.querySelectorAll(".reject-btn").forEach((button) => {
+      button.addEventListener("click", () => reviewJob(button.dataset.jobId, "reject"));
+    });
+
+    list.querySelectorAll(".publish-youtube-btn").forEach((button) => {
+      button.addEventListener("click", () =>
+        openYoutubePublishModal(button.dataset.jobId, button.dataset.jobTitle)
+      );
+    });
+
+    list.querySelectorAll(".delete-btn").forEach((button) => {
+      button.addEventListener("click", () => deleteJob(button.dataset.jobId));
+    });
+
+    list.querySelectorAll(".library-card-select").forEach((checkbox) => {
+      checkbox.addEventListener("click", (event) => event.stopPropagation());
+      checkbox.addEventListener("change", () => {
+        const jobId = checkbox.dataset.jobId;
+        // Matches whichever layout is currently rendered -- a card in
+        // grid mode, a row in list mode.
+        const item = checkbox.closest(".library-card, .library-list-row");
+
+        if (checkbox.checked) {
+          selectedJobIds.add(jobId);
+        } else {
+          selectedJobIds.delete(jobId);
         }
 
-        list.querySelectorAll(".play-btn").forEach((button) => {
-          button.addEventListener("click", () => playTrack(button.dataset.filename, button.dataset.title));
-        });
+        item.classList.toggle("selected", checkbox.checked);
+        updateBulkDeleteButton();
+      });
+    });
+  }
 
-        list.querySelectorAll(".approve-btn").forEach((button) => {
-          button.addEventListener("click", () => reviewJob(button.dataset.jobId, "approve"));
-        });
+  async function loadLibrary() {
+    const libraryStatus = document.getElementById("library-status");
+    libraryStatus.textContent = "Loading…";
 
-        list.querySelectorAll(".reject-btn").forEach((button) => {
-          button.addEventListener("click", () => reviewJob(button.dataset.jobId, "reject"));
-        });
-
-        list.querySelectorAll(".publish-youtube-btn").forEach((button) => {
-          button.addEventListener("click", () =>
-            openYoutubePublishModal(button.dataset.jobId, button.dataset.jobTitle)
-          );
-        });
-
-        list.querySelectorAll(".delete-btn").forEach((button) => {
-          button.addEventListener("click", () => deleteJob(button.dataset.jobId));
-        });
-
-        list.querySelectorAll(".library-card-select").forEach((checkbox) => {
-          checkbox.addEventListener("click", (event) => event.stopPropagation());
-          checkbox.addEventListener("change", () => {
-            const jobId = checkbox.dataset.jobId;
-            const card = checkbox.closest(".library-card");
-
-            if (checkbox.checked) {
-              selectedJobIds.add(jobId);
-            } else {
-              selectedJobIds.delete(jobId);
-            }
-
-            card.classList.toggle("selected", checkbox.checked);
-            updateBulkDeleteButton();
-          });
-        });
-      }
-
+    try {
+      lastLoadedJobs = await jsonRequest("/api/v1/audio/jobs?limit=50");
+      renderLibraryItems(lastLoadedJobs);
       libraryStatus.textContent = "";
     } catch (error) {
       libraryStatus.textContent = "Failed to load library.";
@@ -2841,18 +3051,128 @@
     `;
   }
 
+  let albumConceptsCache = {};
+
+  function formatEnumList(values) {
+    if (!values || values.length === 0) {
+      return "none";
+    }
+    return values.map((value) => value.replace(/_/g, " ")).join(", ");
+  }
+
+  function renderConceptSpecs(conceptId) {
+    const panel = document.getElementById("album-concept-specs");
+    const concept = albumConceptsCache[conceptId];
+
+    if (!concept) {
+      panel.textContent = "";
+      return;
+    }
+
+    const hz = concept.hz_pool.map((value) => `${value}Hz`).join(", ");
+    const brainwave = concept.brainwave_bands && concept.brainwave_bands.length
+      ? `${formatEnumList(concept.brainwave_bands)} (binaural/isochronic)`
+      : "none";
+    panel.innerHTML =
+      `Hz: ${escapeHtml(hz)} · Noise: ${escapeHtml(formatEnumList(concept.noise_type_preference))} · ` +
+      `Brainwave: ${escapeHtml(brainwave)} · Natural sounds: ${escapeHtml(formatEnumList(concept.natural_sound_categories))}`;
+  }
+
   async function loadAlbumConcepts() {
     const select = document.getElementById("album-concept");
 
     try {
       const concepts = await jsonRequest("/api/v1/albums/concepts");
+      albumConceptsCache = {};
+      concepts.forEach((concept) => {
+        albumConceptsCache[concept.id] = concept;
+      });
       select.innerHTML = concepts
         .map((concept) => `<option value="${escapeHtml(concept.id)}">${escapeHtml(concept.label)}</option>`)
         .join("");
+      renderConceptSpecs(select.value);
+      renderConceptResearch(select.value);
     } catch (error) {
       select.innerHTML = "<option value=\"\">Failed to load concepts</option>";
     }
   }
+
+  let conceptResearchCache = {};
+
+  function formatResearchPairs(pairs) {
+    if (!pairs || pairs.length === 0) {
+      return "none found";
+    }
+    return pairs.map(([value, count]) => `${escapeHtml(value)} (${count})`).join(", ");
+  }
+
+  function renderConceptResearch(conceptId) {
+    const panel = document.getElementById("album-research-panel");
+    const record = conceptResearchCache[conceptId];
+
+    if (!record) {
+      panel.innerHTML = "<p class=\"subtitle\">No research yet for this concept -- click \"Research this concept\" to pull real YouTube data.</p>";
+      return;
+    }
+
+    const researchedAt = new Date(record.researched_at).toLocaleString();
+    panel.innerHTML = `
+      <p class="subtitle">
+        Based on ${record.sample_size} real top-viewed videos for "${escapeHtml(record.query)}" · researched ${escapeHtml(researchedAt)}
+      </p>
+      <div class="grid">
+        <div><strong>Top Hz</strong><div class="mono">${formatResearchPairs(record.top_hz_values)}</div></div>
+        <div><strong>Top noise types</strong><div class="mono">${formatResearchPairs(record.top_noise_types)}</div></div>
+        <div><strong>Top themes</strong><div class="mono">${formatResearchPairs(record.top_themes)}</div></div>
+        <div><strong>Real video lengths</strong><div class="mono">${formatResearchPairs(record.top_duration_buckets)}</div></div>
+      </div>
+    `;
+  }
+
+  async function loadConceptResearch() {
+    try {
+      const records = await jsonRequest("/api/v1/albums/concepts/research");
+      conceptResearchCache = {};
+      records.forEach((record) => {
+        conceptResearchCache[record.concept_id] = record;
+      });
+      renderConceptResearch(document.getElementById("album-concept").value);
+    } catch (error) {
+      // Cached research is a nice-to-have -- silently leave the panel
+      // in its "no research yet" state if this fails.
+    }
+  }
+
+  async function researchCurrentConcept() {
+    const button = document.getElementById("album-research-btn");
+    const status = document.getElementById("album-research-status");
+    const conceptId = document.getElementById("album-concept").value;
+
+    if (!conceptId) {
+      status.textContent = "Pick a concept first.";
+      return;
+    }
+
+    button.disabled = true;
+    status.textContent = "Searching YouTube for real top-performing videos...";
+
+    try {
+      const record = await jsonRequest(`/api/v1/albums/concepts/${conceptId}/research`, { method: "POST" });
+      conceptResearchCache[conceptId] = record;
+      renderConceptResearch(conceptId);
+      status.textContent = "Research updated.";
+    } catch (error) {
+      status.textContent = `Research failed: ${error.message}`;
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  document.getElementById("album-research-btn").addEventListener("click", researchCurrentConcept);
+  document.getElementById("album-concept").addEventListener("change", (event) => {
+    renderConceptSpecs(event.target.value);
+    renderConceptResearch(event.target.value);
+  });
 
   function renderAlbumTrackSummaryGrid(trackSummary) {
     const cells = [];
@@ -2895,6 +3215,7 @@
         const badgeClass = ALBUM_BATCH_BADGE_CLASS[album.status] || "badge-pending";
         const overallPct = albumOverallProgressPercent(album.track_summary);
         const doneCount = album.track_summary.playlist_added || 0;
+        const totalCount = Object.values(album.track_summary).reduce((sum, n) => sum + n, 0);
         card.innerHTML = `
           <div class="album-card-header">
             <span class="album-card-title">${escapeHtml(album.title)}</span>
@@ -2903,7 +3224,7 @@
           <div class="album-progress-bar">
             <div class="album-progress-bar-fill" style="width:${overallPct}%"></div>
           </div>
-          <div class="album-progress-label">${overallPct}% complete · ${doneCount}/10 tracks live</div>
+          <div class="album-progress-label">${overallPct}% complete · ${doneCount}/${totalCount} tracks live</div>
           <div class="album-track-grid">${renderAlbumTrackSummaryGrid(album.track_summary)}</div>
         `;
         card.addEventListener("click", () => openAlbumDetail(album.id));
@@ -2913,6 +3234,29 @@
       list.innerHTML = "<p class=\"status\">Failed to load albums.</p>";
     }
   }
+
+  async function loadAlbumYouTubeConnection() {
+    const widget = document.getElementById("album-youtube-connection-widget");
+    const statusSpan = document.getElementById("album-youtube-connection-status");
+    const reconnectBtn = document.getElementById("album-youtube-reconnect-btn");
+
+    try {
+      const status = await jsonRequest("/api/v1/publishing/youtube/status");
+      widget.classList.remove("hidden");
+
+      if (status.connected) {
+        statusSpan.textContent = `YouTube: connected (${status.channel_title || status.channel_id}).`;
+        reconnectBtn.classList.add("hidden");
+      } else {
+        statusSpan.textContent = "YouTube: not connected -- uploads are paused until you reconnect.";
+        reconnectBtn.classList.remove("hidden");
+      }
+    } catch (error) {
+      widget.classList.add("hidden");
+    }
+  }
+
+  document.getElementById("album-youtube-reconnect-btn").addEventListener("click", connectYouTube);
 
   async function loadAlbumQuota() {
     const widget = document.getElementById("album-quota-widget");
@@ -2994,6 +3338,7 @@
 
     albumPollTimer = setInterval(async () => {
       await loadAlbums();
+      await loadAlbumYouTubeConnection();
       if (currentAlbumDetailId) {
         await openAlbumDetail(currentAlbumDetailId);
       }
@@ -3019,7 +3364,7 @@
     }
 
     button.disabled = true;
-    status.textContent = "Generating album (this creates 10 tracks to be rendered in the background)...";
+    status.textContent = "Generating album (tracks will be rendered in the background)...";
 
     try {
       await jsonRequest("/api/v1/albums", {
@@ -3055,6 +3400,8 @@
     if (target === "albums") {
       loadAlbums();
       loadAlbumQuota();
+      loadAlbumYouTubeConnection();
+      loadConceptResearch();
       startAlbumPolling();
     } else {
       stopAlbumPolling();
@@ -3083,8 +3430,12 @@
   updateConditionalFields();
   loadPresets();
   loadRealSamples();
+  document.querySelectorAll(".view-toggle-btn").forEach((button) => {
+    button.classList.toggle("active", button.dataset.viewMode === libraryViewMode);
+  });
   loadLibrary();
   loadAlbumConcepts();
+  loadConceptResearch();
   loadSecretStatuses();
   refreshYouTubeConnectionStatus();
   refreshInternetArchiveStatus();

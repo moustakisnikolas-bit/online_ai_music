@@ -14,6 +14,27 @@ class AlbumConceptResponse(BaseModel):
     melody_instruments: list[str]
     melody_scales: list[str]
     noise_type_preference: list[str]
+    # Was silently dropped by response_model filtering before this field
+    # existed here -- list_concepts() always included it in the raw dict,
+    # but AlbumConceptResponse's declared fields are what actually
+    # reaches the client.
+    brainwave_bands: list[str] = []
+
+
+class ConceptResearchResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    concept_id: str
+    query: str
+    sample_size: int
+    # [[value, count], ...], most-to-least common -- real YouTube Data
+    # API search results, not estimated.
+    top_hz_values: list[list]
+    top_noise_types: list[list]
+    top_themes: list[list]
+    top_duration_buckets: list[list]
+    top_videos: list[dict]
+    researched_at: datetime
 
 
 class AlbumBatchCreateRequest(BaseModel):

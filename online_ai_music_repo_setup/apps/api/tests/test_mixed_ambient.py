@@ -199,3 +199,35 @@ def test_ambient_texture_layer_rejects_none() -> None:
             duration_seconds=1,
             sample_rate=8000,
         )
+
+
+@pytest.mark.parametrize("noise_type", ["white_noise", "pink_noise", "brown_noise", "blue_noise", "violet_noise"])
+def test_ambient_noise_layer_accepts_every_real_noise_color(noise_type: str, tmp_path: Path) -> None:
+    request = AudioGenerationRequest(
+        title="Noise Color Smoke Test",
+        mode=AudioMode.MIXED_AMBIENT,
+        ambient_layers=[{"kind": "noise", "noise_type": noise_type, "gain": 0.5}],
+        duration_seconds=1,
+        sample_rate=8000,
+        amplitude=0.2,
+        fade_in_seconds=0,
+        fade_out_seconds=0,
+    )
+
+    result = generate_audio(request, tmp_path)
+
+    with wave.open(result.file_path, "rb") as wav_file:
+        assert wav_file.getnframes() == 8000
+
+
+def test_ambient_noise_layer_rejects_a_non_noise_audio_mode() -> None:
+    with pytest.raises(ValidationError):
+        AudioGenerationRequest(
+            title="Invalid Noise Type",
+            mode=AudioMode.MIXED_AMBIENT,
+            ambient_layers=[
+                {"kind": "noise", "noise_type": "sine", "gain": 0.2},
+            ],
+            duration_seconds=1,
+            sample_rate=8000,
+        )

@@ -4,7 +4,12 @@ import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.services.metadata_generator import SAFE_CONTEXT_LABELS, MetadataPackage, clean_text
+from app.services.metadata_generator import (
+    COMPLIANCE_NOTE,
+    SAFE_CONTEXT_LABELS,
+    MetadataPackage,
+    clean_text,
+)
 from app.services.provider_config import require_openrouter_key
 
 _CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -37,7 +42,9 @@ def _build_prompt(
         "Respond with ONLY a JSON object with exactly these keys: "
         '"title" (string, catchy, under 100 chars), '
         '"subtitle" (string, under 100 chars), '
-        '"description" (string, 2-4 sentences), '
+        '"description" (string, 300-400 characters, written to intrigue '
+        "someone scrolling past into clicking play -- a real hook, not "
+        "generic filler), "
         '"keywords" (array of 5-10 lowercase strings). '
         "No markdown, no code fences, no explanation -- JSON only."
     )
@@ -104,10 +111,7 @@ def generate_llm_metadata_package(
         keywords=sorted(set(keyword.lower() for keyword in keywords)),
         category=SAFE_CONTEXT_LABELS.get(context, "Ambient"),
         language=language,
-        compliance_note=(
-            "Use as ambient or relaxation content. Do not present this asset "
-            "as medical treatment, disease prevention or guaranteed therapy."
-        ),
+        compliance_note=COMPLIANCE_NOTE,
     )
 
     return package, cost_usd

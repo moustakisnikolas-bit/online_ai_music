@@ -1,5 +1,6 @@
 import logging
 import secrets
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
@@ -7,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import RedirectResponse
+from google.auth.transport.requests import Request as GoogleAuthRequest
 from sqlalchemy.orm import Session
 
 from app.api.dependencies.database import get_db
@@ -43,6 +45,46 @@ from app.services.youtube_publisher import (
     set_video_thumbnail,
     upload_video,
 )
+
+# A stored credential row existing doesn't mean the token still works --
+# it can be dead (expired/revoked refresh token) while still sitting in
+# the DB looking "connected." fetch_channel_identity is a real, cheap
+# live check, but calling it on every UI poll (every 6s on the Albums
+# page) would hammer Google's API for no reason -- cache the result
+# briefly instead. Not per-request state, just an in-process TTL cache;
+# fine for this single-process app, not meant to survive a restart.
+_TOKEN_CHECK_CACHE: dict[str, tuple[float, bool]] = {}
+_TOKEN_CHECK_TTL_SECONDS = 300
+
+
+def _token_is_currently_valid(record, *, db: Session) -> bool:
+    cached = _TOKEN_CHECK_CACHE.get(record.channel_id)
+    now = time.monotonic()
+
+    if cached is not None and (now - cached[0]) < _TOKEN_CHECK_TTL_SECONDS:
+        return cached[1]
+
+    try:
+        credentials = credentials_from_stored(record, db=db)
+        # credentials_from_stored's own `if not credentials.valid` guard
+        # never fires in practice -- it constructs Credentials without an
+        # expiry, and google-auth treats "no expiry" as "never expired,"
+        # so a stale cached access token gets reused as-is. That's fine
+        # for real uploads (the transport layer retries-with-refresh on
+        # a 401), but it means "did this call succeed" doesn't actually
+        # prove the *refresh token* still works -- an unexpired cached
+        # access token would pass right through it. Force the refresh
+        # explicitly so this check tests the thing that actually dies
+        # (invalid_grant on the refresh token), not the access token's
+        # leftover shelf life.
+        credentials.refresh(GoogleAuthRequest())
+        fetch_channel_identity(credentials)
+        valid = True
+    except Exception:  # noqa: BLE001 -- any failure here means "not usable right now"
+        valid = False
+
+    _TOKEN_CHECK_CACHE[record.channel_id] = (now, valid)
+    return valid
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +181,7 @@ def youtube_connection_status(
         return YouTubeConnectionStatusResponse(connected=False)
 
     return YouTubeConnectionStatusResponse(
-        connected=True,
+        connected=_token_is_currently_valid(record, db=db),
         channel_id=record.channel_id,
         channel_title=record.channel_title,
         connected_at=record.connected_at,

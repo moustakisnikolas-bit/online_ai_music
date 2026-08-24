@@ -15,6 +15,7 @@ from app.audio.dsp import (
     generate_airplane_cabin_texture,
     generate_binaural_channels,
     generate_birds_texture,
+    generate_blue_noise,
     generate_brown_noise,
     generate_chimes_texture,
     generate_deep_waterfall_texture,
@@ -23,6 +24,7 @@ from app.audio.dsp import (
     generate_isochronic_samples,
     generate_rain_texture,
     generate_thunder_texture,
+    generate_violet_noise,
     generate_water_texture,
     generate_waves_texture,
     generate_wind_texture,
@@ -235,7 +237,13 @@ def _apply_global_textures(base: np.ndarray, request: AudioGenerationRequest) ->
     return mix_tracks(_tracks())
 
 
-def _mono_samples(request: AudioGenerationRequest) -> np.ndarray:
+def _mono_samples(request: AudioGenerationRequest, channel: str | None = None) -> np.ndarray:
+    # channel is only meaningful for a MIXED_AMBIENT request containing a
+    # binaural_tone layer: "left"/"right" render that layer's true stereo-
+    # differentiated frequency; None (mono/preview) mixes both of the
+    # binaural pair's frequencies together instead, which is a real,
+    # different-but-related technique (a monaural beat) rather than a
+    # silent no-op or a crash.
     if request.mode == AudioMode.SINE:
         return generate_sine_samples(
             request.frequency_hz or 432.0,
@@ -302,6 +310,20 @@ def _mono_samples(request: AudioGenerationRequest) -> np.ndarray:
                         request.amplitude,
                         layer_seed,
                     )
+                if layer.noise_type == AudioMode.BLUE_NOISE:
+                    return generate_blue_noise(
+                        request.duration_seconds,
+                        request.sample_rate,
+                        request.amplitude,
+                        layer_seed,
+                    )
+                if layer.noise_type == AudioMode.VIOLET_NOISE:
+                    return generate_violet_noise(
+                        request.duration_seconds,
+                        request.sample_rate,
+                        request.amplitude,
+                        layer_seed,
+                    )
                 return generate_brown_noise(
                     request.duration_seconds,
                     request.sample_rate,
@@ -315,6 +337,40 @@ def _mono_samples(request: AudioGenerationRequest) -> np.ndarray:
                     request.duration_seconds,
                     request.sample_rate,
                     request.amplitude,
+                )
+
+            if layer.kind == "binaural_tone":
+                if channel == "left":
+                    return generate_sine_samples(
+                        layer.left_frequency_hz,
+                        request.duration_seconds,
+                        request.sample_rate,
+                        request.amplitude,
+                    )
+                if channel == "right":
+                    return generate_sine_samples(
+                        layer.right_frequency_hz,
+                        request.duration_seconds,
+                        request.sample_rate,
+                        request.amplitude,
+                    )
+                return generate_layered_tones(
+                    [
+                        (layer.left_frequency_hz, request.amplitude),
+                        (layer.right_frequency_hz, request.amplitude),
+                    ],
+                    request.duration_seconds,
+                    request.sample_rate,
+                )
+
+            if layer.kind == "isochronic":
+                return generate_isochronic_samples(
+                    carrier_frequency_hz=layer.carrier_frequency_hz,
+                    pulse_frequency_hz=layer.pulse_frequency_hz,
+                    duration_seconds=request.duration_seconds,
+                    sample_rate=request.sample_rate,
+                    amplitude=request.amplitude,
+                    modulation_depth=layer.modulation_depth,
                 )
 
             if layer.kind == "texture":
@@ -665,6 +721,10 @@ def generate_audio(
             file_path=str(final_output_path),
         )
 
+    mixed_ambient_binaural = request.mode == AudioMode.MIXED_AMBIENT and any(
+        layer.kind == "binaural_tone" for layer in request.ambient_layers
+    )
+
     if request.mode == AudioMode.BINAURAL_BEATS:
         left, right = generate_binaural_channels(
             request.left_frequency_hz or 200.0,
@@ -675,6 +735,17 @@ def generate_audio(
         )
         left = _apply_global_textures(left, request)
         right = _apply_global_textures(right, request)
+        channels = [
+            _process_channel(left, request),
+            _process_channel(right, request),
+        ]
+    elif mixed_ambient_binaural and request.channels == ChannelMode.STEREO:
+        # A binaural_tone layer only has a real effect in true stereo --
+        # the natural-sound/noise/melody layers are rendered identically
+        # on both sides (same seed), only the tone layer's frequency
+        # actually differs left vs right.
+        left = _apply_global_textures(_mono_samples(request, channel="left"), request)
+        right = _apply_global_textures(_mono_samples(request, channel="right"), request)
         channels = [
             _process_channel(left, request),
             _process_channel(right, request),

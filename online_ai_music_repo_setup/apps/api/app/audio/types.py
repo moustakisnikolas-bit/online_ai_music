@@ -7,6 +7,8 @@ class AudioMode(StrEnum):
     WHITE_NOISE = "white_noise"
     PINK_NOISE = "pink_noise"
     BROWN_NOISE = "brown_noise"
+    BLUE_NOISE = "blue_noise"
+    VIOLET_NOISE = "violet_noise"
     BINAURAL_BEATS = "binaural_beats"
     ISOCHRONIC_TONES = "isochronic_tones"
     MIXED_AMBIENT = "mixed_ambient"

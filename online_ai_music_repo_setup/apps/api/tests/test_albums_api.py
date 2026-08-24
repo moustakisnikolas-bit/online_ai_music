@@ -6,6 +6,7 @@ from sqlalchemy import delete
 from app.db.session import SessionLocal
 from app.main import app
 from app.models.album import AlbumBatch, AlbumTrack
+from app.services.album_pipeline import TRACKS_PER_ALBUM
 
 client = TestClient(app)
 
@@ -26,7 +27,20 @@ def test_list_album_concepts_returns_the_real_catalog() -> None:
     assert response.status_code == 200
     body = response.json()
     ids = {c["id"] for c in body}
-    assert {"focus", "relaxation", "mind_clearness"} <= ids
+    assert {"focus", "relaxation", "mind_clearness", "sleep", "healing", "study", "chakra"} <= ids
+
+
+def test_list_album_concepts_exposes_brainwave_bands_and_noise_colors() -> None:
+    # Real regression test for a real bug: AlbumConceptResponse not
+    # declaring brainwave_bands meant FastAPI's response_model filtering
+    # silently dropped it from every response, even though the concept
+    # catalog itself always had it.
+    response = client.get("/api/v1/albums/concepts")
+
+    body = {c["id"]: c for c in response.json()}
+    assert body["chakra"]["brainwave_bands"] == ["theta", "alpha"]
+    assert "violet_noise" in body["chakra"]["noise_type_preference"]
+    assert "blue_noise" in body["study"]["noise_type_preference"]
 
 
 def test_concepts_route_does_not_collide_with_album_id_route() -> None:
@@ -38,7 +52,7 @@ def test_concepts_route_does_not_collide_with_album_id_route() -> None:
     assert isinstance(response.json(), list)
 
 
-def test_create_album_creates_ten_tracks() -> None:
+def test_create_album_creates_tracks_per_album_tracks() -> None:
     response = client.post(
         "/api/v1/albums", json={"concept_id": "focus", "title": "Test Focus Album", "seed": 1}
     )
@@ -48,8 +62,8 @@ def test_create_album_creates_ten_tracks() -> None:
     try:
         assert body["status"] == "generating"
         assert body["concept_id"] == "focus"
-        assert sum(body["track_summary"].values()) == 10
-        assert body["track_summary"].get("pending") == 10
+        assert sum(body["track_summary"].values()) == TRACKS_PER_ALBUM
+        assert body["track_summary"].get("pending") == TRACKS_PER_ALBUM
     finally:
         _cleanup_batch(body["id"])
 
@@ -71,7 +85,7 @@ def test_get_album_returns_full_track_detail() -> None:
 
         assert response.status_code == 200
         body = response.json()
-        assert len(body["tracks"]) == 10
+        assert len(body["tracks"]) == TRACKS_PER_ALBUM
         assert all(track["status"] == "pending" for track in body["tracks"])
         assert body["tracks"][0]["sequence_index"] == 0
     finally:

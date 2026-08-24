@@ -27,9 +27,12 @@ class AmbientNoiseLayer(BaseModel):
             AudioMode.WHITE_NOISE,
             AudioMode.PINK_NOISE,
             AudioMode.BROWN_NOISE,
+            AudioMode.BLUE_NOISE,
+            AudioMode.VIOLET_NOISE,
         }:
             raise ValueError(
-                "noise_type must be white_noise, pink_noise or brown_noise"
+                "noise_type must be white_noise, pink_noise, brown_noise, "
+                "blue_noise or violet_noise"
             )
         return value
 
@@ -37,6 +40,29 @@ class AmbientNoiseLayer(BaseModel):
 class AmbientToneLayer(BaseModel):
     kind: Literal["tone"] = "tone"
     frequency_hz: float = Field(gt=0, le=20000)
+    gain: float = Field(gt=0, le=1.0)
+
+
+class AmbientBinauralToneLayer(BaseModel):
+    # A true stereo-differentiated tone pair -- the brain perceives the
+    # difference between left/right as a phantom "beat" at that rate.
+    # Only has a real effect when the overall request renders in stereo;
+    # see audio_generator.py's channel-aware mixed_ambient path.
+    kind: Literal["binaural_tone"] = "binaural_tone"
+    left_frequency_hz: float = Field(gt=0, le=20000)
+    right_frequency_hz: float = Field(gt=0, le=20000)
+    gain: float = Field(gt=0, le=1.0)
+
+
+class AmbientIsochronicLayer(BaseModel):
+    # A single pulsed tone (amplitude-modulated at pulse_frequency_hz) --
+    # the mono-compatible alternative to binaural_tone for the same
+    # brainwave-entrainment framing (theta/alpha/beta), since it doesn't
+    # need stereo separation to be perceived.
+    kind: Literal["isochronic"] = "isochronic"
+    carrier_frequency_hz: float = Field(gt=0, le=20000)
+    pulse_frequency_hz: float = Field(gt=0, le=100)
+    modulation_depth: float = Field(default=1.0, ge=0, le=1.0)
     gain: float = Field(gt=0, le=1.0)
 
 
@@ -112,6 +138,8 @@ class AmbientSynthLayer(BaseModel):
 AmbientLayerRequest = Annotated[
     AmbientNoiseLayer
     | AmbientToneLayer
+    | AmbientBinauralToneLayer
+    | AmbientIsochronicLayer
     | AmbientTextureLayer
     | AmbientSampleLayer
     | AmbientSynthLayer,

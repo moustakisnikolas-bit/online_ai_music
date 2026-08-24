@@ -105,6 +105,45 @@ def test_list_actionable_tracks_excludes_terminal_statuses(db) -> None:
     assert {t.id for t in actionable} == {pending_track.id, uploaded_track.id}
 
 
+def test_list_actionable_tracks_excludes_future_scheduled_uploads(db) -> None:
+    # A track whose upload got deferred to tomorrow (quota exhausted)
+    # must not keep winning the sequence_index ordering forever -- that
+    # starves every other track in the batch, including ones that don't
+    # need any quota at all (harmony check, audio/video render).
+    from datetime import date, timedelta
+
+    batch = create_album_batch(db, concept_id="focus", title="Focus Vol. 1")
+    deferred_track = create_album_track(
+        db, album_batch_id=batch.id, sequence_index=0, title="Deferred", combination={}
+    )
+    next_track = create_album_track(
+        db, album_batch_id=batch.id, sequence_index=1, title="Next", combination={}
+    )
+    today = date(2026, 7, 30)
+    update_album_track(
+        db, deferred_track, status="video_rendered", scheduled_upload_date=today + timedelta(days=1)
+    )
+
+    actionable = list_actionable_tracks(db, today=today)
+
+    assert [t.id for t in actionable] == [next_track.id]
+
+
+def test_list_actionable_tracks_includes_track_once_its_scheduled_date_arrives(db) -> None:
+    from datetime import date
+
+    batch = create_album_batch(db, concept_id="focus", title="Focus Vol. 1")
+    track = create_album_track(
+        db, album_batch_id=batch.id, sequence_index=0, title="Deferred", combination={}
+    )
+    today = date(2026, 7, 31)
+    update_album_track(db, track, status="video_rendered", scheduled_upload_date=today)
+
+    actionable = list_actionable_tracks(db, today=today)
+
+    assert [t.id for t in actionable] == [track.id]
+
+
 def test_list_actionable_tracks_excludes_cancelled_batches(db) -> None:
     batch = create_album_batch(db, concept_id="focus", title="Focus Vol. 1")
     create_album_track(db, album_batch_id=batch.id, sequence_index=0, title="A", combination={})

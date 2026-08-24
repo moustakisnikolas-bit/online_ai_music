@@ -311,6 +311,40 @@ def generate_pink_noise(
     return normalize(pink, peak=amplitude)
 
 
+def generate_violet_noise(
+    duration_seconds: int,
+    sample_rate: int,
+    amplitude: float,
+    seed: int | None,
+) -> np.ndarray:
+    # Violet/purple noise is white noise *differentiated* (a first-
+    # difference FIR, the mirror image of brown noise's integration
+    # below) -- +6dB/octave, the opposite slope of brown's -6dB/octave.
+    rng = np.random.default_rng(seed)
+    frame_count = duration_seconds * sample_rate
+    white = rng.uniform(-1.0, 1.0, size=frame_count).astype(np.float32, copy=False)
+    violet = lfilter([1.0, -1.0], [1.0], white)
+    return normalize(violet, peak=amplitude)
+
+
+def generate_blue_noise(
+    duration_seconds: int,
+    sample_rate: int,
+    amplitude: float,
+    seed: int | None,
+) -> np.ndarray:
+    # Blue/azure noise is pink noise differentiated: pink is already
+    # -3dB/octave, and differentiation adds +6dB/octave on top of
+    # whatever slope it's applied to, landing blue at +3dB/octave -- the
+    # mirror image of pink, same relationship blue/violet already have.
+    rng = np.random.default_rng(seed)
+    frame_count = duration_seconds * sample_rate
+    white = rng.uniform(-1.0, 1.0, size=frame_count).astype(np.float32, copy=False)
+    pink = lfilter(_PINK_NOISE_NUMERATOR, _PINK_NOISE_DENOMINATOR, white)
+    blue = lfilter([1.0, -1.0], [1.0], pink)
+    return normalize(blue, peak=amplitude)
+
+
 def generate_rain_texture(
     duration_seconds: int,
     sample_rate: int,

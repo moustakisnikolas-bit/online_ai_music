@@ -27,6 +27,11 @@ Thumbs.db
 # Generated runtime output (produced by the app, not source)
 **/data/generated/
 
+# Daily upload-queue snapshots written by scripts/ops/daily_upload_report.py
+# (via the "AION Daily Upload Report" scheduled task) -- generated output,
+# not source.
+**/scripts/ops/daily_reports/
+
 # Sample library audio -- downloaded from Freesound at runtime by
 # freesound_importer.py, not source; multi-hundred-MB of .wav files that
 # don't belong in git history.
