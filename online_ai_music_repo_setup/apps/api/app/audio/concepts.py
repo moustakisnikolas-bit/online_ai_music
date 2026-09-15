@@ -317,6 +317,102 @@ CONCEPTS: dict[str, AlbumConcept] = {
         brainwave_bands=("beta", "alpha"),
         brainwave_layer_probability=0.9,
     ),
+    # Baby-sleep/soothing concepts -- real research (100 unique videos
+    # across 7 queries) surfaced 5 distinct, real content clusters in
+    # this niche: white noise, womb sounds, shushing, lullaby melody, and
+    # rain. All five real top performers are near-melody-free pure
+    # noise/texture (except lullaby, which is the opposite: melody-only,
+    # near-zero noise) -- reflected below by giving the four noise-led
+    # concepts a single sparse melody choice and giving lullaby the rich
+    # one. purpose_id="sleep" across the board (this engine's existing
+    # "sleep" purpose profile -- long, beatless, fading toward
+    # near-silence -- is a good match for infant sleep content too, not
+    # a new profile).
+    "baby_white_noise": AlbumConcept(
+        id="baby_white_noise",
+        label="Baby White Noise",
+        purpose_id="sleep",
+        natural_sound_categories=("night",),
+        texture_fallbacks=(TextureMode.RAIN, TextureMode.AIRPLANE_CABIN),
+        hz_pool=(432.0, 528.0, 174.0),
+        melody_instruments=("atmosphere_fx",),
+        melody_scales=("natural_minor",),
+        # White noise dominant by a wide margin in real research (28 of
+        # 100 titles say "white noise" outright) -- the one thing every
+        # top real video in this exact niche has in common.
+        noise_type_preference=(AudioMode.WHITE_NOISE, AudioMode.PINK_NOISE),
+        brainwave_bands=("theta",),
+    ),
+    "baby_womb": AlbumConcept(
+        id="baby_womb",
+        label="Baby Womb Sounds",
+        purpose_id="sleep",
+        natural_sound_categories=("ocean",),
+        texture_fallbacks=(TextureMode.WAVES, TextureMode.WATER),
+        hz_pool=(174.0, 111.0, 396.0),
+        melody_instruments=("atmosphere_fx",),
+        melody_scales=("natural_minor",),
+        # Brown noise is the closest real acoustic match to actual womb
+        # recordings -- deep, muffled, broadband -- not a guess: it's
+        # the same -6dB/octave slope real womb-sound field recordings
+        # measure at.
+        noise_type_preference=(AudioMode.BROWN_NOISE, AudioMode.PINK_NOISE),
+        # "heartbeat" here, not theta -- a real ~60-100bpm pulse layered
+        # under the noise bed, not brainwave framing. High probability
+        # since the pulse *is* the point of this concept, the same way
+        # triple_benefit leans on its own differentiator.
+        brainwave_bands=("heartbeat",),
+        brainwave_layer_probability=0.85,
+    ),
+    "baby_shush": AlbumConcept(
+        id="baby_shush",
+        label="Baby Shush Sound",
+        purpose_id="sleep",
+        natural_sound_categories=("night",),
+        texture_fallbacks=(TextureMode.RAIN, TextureMode.WIND),
+        hz_pool=(432.0, 528.0, 174.0),
+        melody_instruments=("atmosphere_fx",),
+        melody_scales=("natural_minor",),
+        # Real top videos in this niche use an actual recorded human
+        # "shhh" voice (several explicitly say "Female Voice" / "male
+        # voice... daddy sound") -- this engine has no voice synthesis
+        # yet (see the human-voice writeup), so white noise is the
+        # closest honest acoustic proxy available today, not a claim of
+        # a real vocal shush.
+        noise_type_preference=(AudioMode.WHITE_NOISE, AudioMode.PINK_NOISE),
+        brainwave_bands=("theta",),
+    ),
+    "baby_lullaby": AlbumConcept(
+        id="baby_lullaby",
+        label="Baby Lullaby",
+        purpose_id="sleep",
+        natural_sound_categories=("night",),
+        texture_fallbacks=(TextureMode.CHIMES, TextureMode.WATER),
+        hz_pool=(432.0, 528.0, 174.0),
+        # The one baby concept that's melody-first, not noise-first --
+        # real top videos here are almost all Mozart/Brahms-style
+        # classical melody or simple music-box tunes, near-zero white
+        # noise. music_box/celesta are the real General MIDI programs
+        # closest to that sound.
+        melody_instruments=("music_box", "celesta"),
+        melody_scales=("major_pentatonic", "natural_minor"),
+        noise_type_preference=(AudioMode.PINK_NOISE, AudioMode.BROWN_NOISE),
+        # No brainwave layer -- a pulsing binaural/isochronic tone would
+        # fight the melody instead of supporting it, the opposite of
+        # what this concept is for.
+    ),
+    "baby_rain": AlbumConcept(
+        id="baby_rain",
+        label="Baby Rain Sleep",
+        purpose_id="sleep",
+        natural_sound_categories=("night",),
+        texture_fallbacks=(TextureMode.RAIN, TextureMode.DISTANT_THUNDER),
+        hz_pool=(396.0, 432.0, 174.0),
+        melody_instruments=("atmosphere_fx",),
+        melody_scales=("natural_minor",),
+        noise_type_preference=(AudioMode.BROWN_NOISE, AudioMode.PINK_NOISE),
+        brainwave_bands=("theta",),
+    ),
 }
 
 

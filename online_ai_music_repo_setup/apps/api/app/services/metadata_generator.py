@@ -6,6 +6,26 @@ COMPLIANCE_NOTE = (
     "as medical treatment, disease prevention or guaranteed therapy."
 )
 
+# Infants are a genuinely vulnerable audience, and real pediatric
+# guidance on infant sound machines is specific (safe distance/volume,
+# safe-sleep environment) -- worth a dedicated note rather than reusing
+# the generic adult-oriented one above.
+BABY_COMPLIANCE_NOTE = (
+    "Ambient background sound only -- not a medical device and not a "
+    "substitute for supervision. Always follow safe sleep guidance (a "
+    "firm, flat sleep surface with nothing else in the crib) and keep "
+    "any speaker at least 7 feet / 2 meters from the crib, played at a "
+    "low volume, per pediatric hearing-safety guidance."
+)
+
+_BABY_CONCEPT_IDS = frozenset(
+    {"baby_white_noise", "baby_womb", "baby_shush", "baby_lullaby", "baby_rain"}
+)
+
+
+def compliance_note_for(concept_id: str) -> str:
+    return BABY_COMPLIANCE_NOTE if concept_id in _BABY_CONCEPT_IDS else COMPLIANCE_NOTE
+
 
 SAFE_CONTEXT_LABELS = {
     "sleep": "Sleep",
@@ -23,6 +43,11 @@ SAFE_CONTEXT_LABELS = {
     "deep_study": "Deep Study",
     "deep_chakra": "Deep Chakra",
     "triple_benefit": "Sleep, Study & Focus",
+    "baby_white_noise": "Baby White Noise",
+    "baby_womb": "Baby Womb Sounds",
+    "baby_shush": "Baby Shush Sound",
+    "baby_lullaby": "Baby Lullaby",
+    "baby_rain": "Baby Rain Sleep",
     "ambient": "Ambient",
 }
 
@@ -102,5 +127,5 @@ def generate_metadata_package(
         keywords=sorted(set(keywords)),
         category=context_label,
         language=language,
-        compliance_note=COMPLIANCE_NOTE,
+        compliance_note=compliance_note_for(context),
     )

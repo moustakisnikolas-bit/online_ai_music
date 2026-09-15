@@ -5,10 +5,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.services.metadata_generator import (
-    COMPLIANCE_NOTE,
     SAFE_CONTEXT_LABELS,
     MetadataPackage,
     clean_text,
+    compliance_note_for,
 )
 from app.services.provider_config import require_openrouter_key
 
@@ -103,7 +103,9 @@ def generate_llm_metadata_package(
     # language stays deterministic and identical to the template
     # generator's, consistent with the compliance-first principle. Only
     # the creative fields (title/subtitle/description/keywords) come from
-    # the model.
+    # the model. compliance_note_for picks the baby-specific note for
+    # baby_* concepts (context is always concept.id) and the standard
+    # one for everything else.
     package = MetadataPackage(
         title=clean_text(title),
         subtitle=clean_text(subtitle),
@@ -111,7 +113,7 @@ def generate_llm_metadata_package(
         keywords=sorted(set(keyword.lower() for keyword in keywords)),
         category=SAFE_CONTEXT_LABELS.get(context, "Ambient"),
         language=language,
-        compliance_note=COMPLIANCE_NOTE,
+        compliance_note=compliance_note_for(context),
     )
 
     return package, cost_usd

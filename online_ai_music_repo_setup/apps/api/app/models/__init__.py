@@ -1,4 +1,5 @@
 from app.models.album import AlbumBatch, AlbumTrack
+from app.models.album_track_short import AlbumTrackShort
 from app.models.app_secret import AppSecret
 from app.models.audio_asset import AudioAsset
 from app.models.audio_job import AudioJob
@@ -13,6 +14,7 @@ from app.models.youtube_publishing import YouTubeCredential, YouTubePublication,
 __all__ = [
     "AlbumBatch",
     "AlbumTrack",
+    "AlbumTrackShort",
     "AppSecret",
     "AudioAsset",
     "AudioJob",

@@ -5,6 +5,15 @@ import httpx
 _REPLICATE_API_BASE = "https://api.replicate.com/v1"
 _TERMINAL_STATUSES = {"succeeded", "failed", "canceled"}
 _POLL_INTERVAL_SECONDS = 2.0
+# Replicate's own infra occasionally 503s a single status-poll GET even
+# while the prediction itself is running fine and Replicate is otherwise
+# healthy (confirmed via a direct test call during a real incident: create
+# returned 201, but one poll among ~30 mid-generation returned 503). Before
+# this retry existed, that one blip hard-failed the whole track and needed
+# a manual DB recovery. Only these transient, infra-level codes are worth
+# retrying -- a 4xx (bad input, insufficient credit, auth) won't fix itself.
+_TRANSIENT_POLL_STATUS_CODES = {502, 503, 504}
+_MAX_TRANSIENT_POLL_RETRIES = 5
 
 
 def headers(token: str) -> dict:
@@ -65,6 +74,7 @@ def poll_until_complete(
 ) -> dict:
     get_url = prediction["urls"]["get"]
     deadline = time.monotonic() + timeout_seconds
+    transient_retries = 0
 
     while prediction.get("status") not in _TERMINAL_STATUSES:
         if time.monotonic() > deadline:
@@ -72,8 +82,16 @@ def poll_until_complete(
 
         time.sleep(_POLL_INTERVAL_SECONDS)
         response = client.get(get_url, headers=headers(token))
+
+        if response.status_code in _TRANSIENT_POLL_STATUS_CODES:
+            transient_retries += 1
+            if transient_retries > _MAX_TRANSIENT_POLL_RETRIES:
+                _raise_for_status_with_detail(response)
+            continue  # don't touch `prediction` -- retry the same poll next loop
+
         _raise_for_status_with_detail(response)
         prediction = response.json()
+        transient_retries = 0
 
     if prediction["status"] != "succeeded":
         raise RuntimeError(

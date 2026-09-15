@@ -8,6 +8,7 @@ if str(API_PATH) not in sys.path:
 
 from app.db.session import SessionLocal  # noqa: E402
 from app.services.album_pipeline import run_album_worker_tick  # noqa: E402
+from app.services.shorts_pipeline import run_shorts_worker_tick  # noqa: E402
 
 POLL_INTERVAL_SECONDS = 30
 
@@ -27,6 +28,10 @@ def run_album_worker() -> None:
         db = SessionLocal()
         try:
             run_album_worker_tick(db)
+            # A complete no-op while shorts_enabled is False (see
+            # shorts_pipeline.py) -- always safe to call regardless of
+            # the flag's value.
+            run_shorts_worker_tick(db)
         except Exception as exc:
             print(f"Album worker tick failed: {exc}", flush=True)
         finally:

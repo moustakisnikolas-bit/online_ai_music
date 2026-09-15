@@ -25,11 +25,20 @@ _MELODY_ROOT_NOTES = ("C3", "D3", "E3", "G3", "A3", "C4")
 
 # Real EEG frequency-band ranges (distinct from the folklore-adjacent
 # Solfeggio Hz values elsewhere in this module) -- delta/gamma
-# deliberately excluded, not requested.
+# deliberately excluded, not requested. "heartbeat" isn't an EEG band at
+# all -- it's a real resting adult heart rate range (60-100bpm), reusing
+# this exact same pulsed-layer mechanism for a different, honest purpose:
+# simulating the rhythmic thump babies heard in the womb, not brainwave
+# entrainment. Isochronic is the physically sensible technique for it
+# (a real pulse); binaural still gets picked sometimes too since nothing
+# here restricts technique per band -- a low binaural "beat" isn't a
+# literal heartbeat, just a low rhythmic sensation, so this is a real
+# simplification, not a misrepresentation.
 BRAINWAVE_BAND_RANGES: dict[str, tuple[float, float]] = {
     "theta": (4.0, 8.0),
     "alpha": (8.0, 13.0),
     "beta": (13.0, 30.0),
+    "heartbeat": (1.0, 1.67),
 }
 _BRAINWAVE_TECHNIQUES = ("binaural", "isochronic")
 # A concept's tone_hz is chosen first, independently of the brainwave

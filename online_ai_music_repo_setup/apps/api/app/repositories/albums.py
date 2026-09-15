@@ -109,3 +109,16 @@ def update_album_batch(db: Session, batch: AlbumBatch, **fields) -> AlbumBatch:
     db.commit()
     db.refresh(batch)
     return batch
+
+
+def delete_album_track(db: Session, track: AlbumTrack) -> None:
+    db.delete(track)
+    db.commit()
+
+
+def delete_album_batch(db: Session, batch: AlbumBatch) -> None:
+    # Callers must delete the batch's tracks first (delete_album_track) --
+    # album_tracks.album_batch_id has no ON DELETE CASCADE, so deleting
+    # the batch while tracks still reference it violates the FK.
+    db.delete(batch)
+    db.commit()

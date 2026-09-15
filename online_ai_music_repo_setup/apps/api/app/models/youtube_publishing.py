@@ -60,6 +60,12 @@ class YouTubePublication(Base):
     status: Mapped[str] = mapped_column(
         String(50), nullable=False, default="queued", index=True
     )
+    # "long" for every long-form album/manual upload (all pre-existing
+    # rows), "short" for a clip uploaded via shorts_pipeline.py. Lets this
+    # one table keep serving as the single upload-status source of truth
+    # for both video shapes instead of a second parallel status table --
+    # see app/models/album_track_short.py.
+    video_kind: Mapped[str] = mapped_column(String(16), nullable=False, default="long")
     youtube_video_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     youtube_url: Mapped[str | None] = mapped_column(String(512), nullable=True)
     # Tracks whether a custom thumbnail was actually set, separate from the

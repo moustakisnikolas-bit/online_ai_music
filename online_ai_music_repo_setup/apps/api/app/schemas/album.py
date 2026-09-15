@@ -86,3 +86,36 @@ class AlbumBatchResponse(BaseModel):
 
 class AlbumBatchDetailResponse(AlbumBatchResponse):
     tracks: list[AlbumTrackResponse] = Field(default_factory=list)
+
+
+class AlbumTrackShortResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    album_track_id: uuid.UUID
+    clip_index: int
+    start_offset_seconds: int
+    duration_seconds: int
+    status: str
+    video_filename: str | None
+    artwork_filename: str | None
+    youtube_publication_id: uuid.UUID | None
+    scheduled_upload_date: date | None
+    error_message: str | None
+    created_at: datetime
+    updated_at: datetime
+    # Not model columns -- filled in by the route from the parent
+    # AlbumTrack/YouTubePublication so the UI doesn't need a second
+    # round-trip per short just to show what it's a clip of.
+    track_title: str = ""
+    concept_id: str = ""
+    youtube_url: str | None = None
+
+
+class AlbumTrackShortsListResponse(BaseModel):
+    # Real counts by status -- e.g. {"pending": 3, "rendered": 1,
+    # "uploaded": 12, "failed": 0} -- the "how many have been uploaded"
+    # visibility the UI needs, computed from the same rows as `shorts`,
+    # not estimated.
+    summary: dict[str, int] = Field(default_factory=dict)
+    shorts: list[AlbumTrackShortResponse] = Field(default_factory=list)

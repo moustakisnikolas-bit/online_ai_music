@@ -49,9 +49,21 @@ def render_static_video(
     width: int = 1920,
     height: int = 1080,
     frame_rate: int = 30,
+    # Both default to "use the whole audio file", matching every existing
+    # caller's behavior exactly. Set to cut a short clip out of a longer
+    # audio file (see app/services/shorts_pipeline.py) instead of
+    # re-rendering/duplicating the source audio first.
+    audio_start_seconds: float = 0.0,
+    audio_duration_seconds: float | None = None,
 ) -> Path:
     if not ffmpeg_available():
         raise RuntimeError("FFmpeg is required for MP4 rendering.")
+
+    if audio_start_seconds < 0:
+        raise ValueError("audio_start_seconds must be >= 0")
+
+    if audio_duration_seconds is not None and audio_duration_seconds <= 0:
+        raise ValueError("audio_duration_seconds must be > 0")
 
     if Path(output_filename).name != output_filename:
         raise ValueError("Invalid output filename")
@@ -79,6 +91,31 @@ def render_static_video(
     # 30fps, is fairly sparse for an hour of nothing-but-a-static-image).
     gop_size = frame_rate * 2
 
+    # Seeking (-ss) and a duration cap (-t) must be input-level options
+    # placed immediately before the AUDIO -i, not the looped-image -i --
+    # they apply to whichever input immediately follows them. Omitted
+    # entirely (not just zero-valued) when unused, so a default call's
+    # argument list is byte-for-byte identical to before this existed.
+    audio_input_args: list[str] = []
+    if audio_start_seconds:
+        audio_input_args += ["-ss", str(audio_start_seconds)]
+    if audio_duration_seconds is not None:
+        audio_input_args += ["-t", str(audio_duration_seconds)]
+
+    # -shortest ALONE overruns the requested trim by a real, measured
+    # amount (verified against a real 895s production audio file: a
+    # 28s-requested clip came out at 31.2s) -- the looped stillimage
+    # input has no natural duration of its own, and something in its
+    # frame-boundary/GOP timing lets a few extra seconds through after
+    # the trimmed audio stream ends before -shortest's cutoff actually
+    # takes effect. An explicit OUTPUT-level -t as a hard final cap
+    # fixed this exactly (confirmed via ffprobe: 28.000000s) without
+    # affecting -shortest's other job (capping to a full, un-trimmed
+    # audio file when no duration is requested at all).
+    output_duration_args: list[str] = []
+    if audio_duration_seconds is not None:
+        output_duration_args = ["-t", str(audio_duration_seconds)]
+
     command = [
         "ffmpeg",
         "-y",
@@ -91,6 +128,7 @@ def render_static_video(
         str(_INPUT_FRAME_RATE),
         "-i",
         str(artwork_path),
+        *audio_input_args,
         "-i",
         str(audio_path),
         "-vf",
@@ -113,6 +151,7 @@ def render_static_video(
         "-pix_fmt",
         "yuv420p",
         "-shortest",
+        *output_duration_args,
         "-movflags",
         "+faststart",
         str(output_path),

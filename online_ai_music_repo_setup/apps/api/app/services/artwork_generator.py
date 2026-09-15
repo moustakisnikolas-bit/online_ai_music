@@ -29,6 +29,11 @@ PRESETS: dict[str, ArtworkPreset] = {
         height=1080,
         label="Square Preview",
     ),
+    "youtube-shorts": ArtworkPreset(
+        width=1080,
+        height=1920,
+        label="YouTube Shorts Cover",
+    ),
 }
 
 

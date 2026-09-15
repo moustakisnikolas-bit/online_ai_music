@@ -151,6 +151,7 @@ def test_render_harmony_preview_and_check_combination_harmony_real_end_to_end(
         "sleep", "healing", "study", "chakra",
         "deep_focus", "deep_relaxation", "deep_mind_clearness", "deep_sleep",
         "deep_healing", "deep_study", "deep_chakra", "triple_benefit",
+        "baby_white_noise", "baby_womb", "baby_shush", "baby_lullaby", "baby_rain",
     ],
 )
 def test_render_harmony_preview_real_end_to_end_for_each_new_concept(
@@ -310,6 +311,38 @@ def test_render_harmony_preview_passes_with_a_real_brainwave_layer(
         **{
             **base.__dict__,
             "brainwave_band": "alpha",
+            "brainwave_technique": technique,
+            "brainwave_pulse_hz": (band_low + band_high) / 2.0,
+        }
+    )
+
+    samples, sample_rate = render_harmony_preview(combination, concept, tmp_path)
+
+    report = check_combination_harmony(
+        samples,
+        sample_rate,
+        tone_frequency_hz=combination.tone_hz,
+        melody_root_note_hz=combination.melody_root_note_hz(),
+    )
+
+    assert report.passed, report.issues
+
+
+@pytest.mark.parametrize("technique", ["binaural", "isochronic"])
+def test_render_harmony_preview_passes_with_a_real_heartbeat_layer(
+    tmp_path: Path, technique: str
+) -> None:
+    # The "heartbeat" band (~1-1.67Hz, baby_womb) is a much slower pulse
+    # than theta/alpha/beta -- worth its own real render rather than
+    # assuming the existing brainwave-layer safety margin generalizes to
+    # a very different pulse rate.
+    concept = get_concept("baby_womb")
+    base = safe_fallback_combination("baby_womb")
+    band_low, band_high = BRAINWAVE_BAND_RANGES["heartbeat"]
+    combination = TrackCombination(
+        **{
+            **base.__dict__,
+            "brainwave_band": "heartbeat",
             "brainwave_technique": technique,
             "brainwave_pulse_hz": (band_low + band_high) / 2.0,
         }

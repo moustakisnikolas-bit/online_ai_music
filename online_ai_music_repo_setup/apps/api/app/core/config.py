@@ -33,6 +33,38 @@ class Settings(BaseSettings):
     # Google Cloud project quota as the album pipeline.
     youtube_quota_safety_margin_units: int = 800
 
+    # YouTube Shorts generation (see app/services/shorts_pipeline.py).
+    # Default OFF -- flipping this on adds real production content, real
+    # extra Replicate artwork spend (one vertical image per track), and
+    # competes for the same shared YouTube Data API v3 daily quota pool as
+    # long-form uploads (~4 total videos.insert calls/day today), so it's a
+    # deliberate opt-in rather than something that starts the moment this
+    # ships.
+    shorts_enabled: bool = False
+    # Each short costs a full videos.insert (1600 units) same as long-form,
+    # so N shorts/track roughly divides real combined daily upload
+    # throughput by (N+1) -- accepted tradeoff, not a bug.
+    shorts_per_track: int = 5
+    # 15-30s is YouTube Shorts' top-performing retention bracket for a
+    # no-narrative ambient loop (nothing to "build to" -- completion rate
+    # is the dominant ranking signal). 28s keeps real margin under the
+    # 3-minute auto-Shorts-classification ceiling once container/encode
+    # overhead is accounted for. Verified against Google's own Shorts
+    # classification support page as of 2026-09 (vertical/square aspect +
+    # <=3min = auto-Short, no special API field needed).
+    shorts_duration_seconds: int = 28
+    shorts_width: int = 1080
+    shorts_height: int = 1920
+    # Matches how long-form already uploads -- public immediately, no
+    # manual review step.
+    shorts_privacy_status: str = "public"
+    # ISO date string ("YYYY-MM-DD") or None. None means every track
+    # already sitting at "uploaded"/"playlist_added" -- the whole existing
+    # catalog -- becomes shorts-eligible the moment shorts_enabled is
+    # flipped on, same as any track reaching that status in the future.
+    # Set a date here to restrict backfill to tracks uploaded on/after it.
+    shorts_backfill_cutoff_date: str | None = None
+
     # Encrypts YouTubeCredential.access_token/refresh_token at rest -- a
     # refresh_token is a long-lived credential to the connected channel, so
     # storing it in plaintext is a real risk if the database is ever

@@ -1495,9 +1495,23 @@
     <div id="album-list"></div>
   </section>
 
+  <section class="panel">
+    <h2>Shorts</h2>
+    <p class="subtitle">
+      Vertical clips cut from each track's own audio, uploaded to YouTube
+      Shorts separately from the full-length video.
+    </p>
+    <div class="actions">
+      <button type="button" id="shorts-refresh-btn" class="secondary">Refresh</button>
+    </div>
+    <div id="shorts-summary" class="subtitle"></div>
+    <div id="shorts-list"></div>
+  </section>
+
   <section id="album-detail-panel" class="panel hidden">
     <div class="actions">
       <button type="button" id="album-detail-close-btn" class="secondary">&larr; Back to albums</button>
+      <button type="button" id="album-detail-delete-btn" class="warning">Delete album</button>
     </div>
     <h2 id="album-detail-title"></h2>
     <p class="subtitle" id="album-detail-meta"></p>
@@ -2943,6 +2957,13 @@
     failed: "badge-failed"
   };
 
+  const SHORTS_BADGE_CLASS = {
+    pending: "badge-pending",
+    rendered: "badge-processing",
+    uploaded: "badge-completed",
+    failed: "badge-failed"
+  };
+
   const ALBUM_BATCH_BADGE_CLASS = {
     draft: "badge-pending",
     generating: "badge-queued",
@@ -3189,6 +3210,44 @@
       .join("");
   }
 
+  async function deleteAlbum(albumId, title, options = {}) {
+    const force = options.force === true;
+    const confirmMessage = force
+      ? `"${title}" has tracks already published to YouTube. Delete it anyway? This does NOT remove the videos from YouTube -- only the local record.`
+      : `Delete album "${title}"? This permanently removes it and its generated audio/artwork/video files.`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/v1/albums/${albumId}${force ? "?force=true" : ""}`, {
+        method: "DELETE"
+      });
+
+      if (response.status === 409 && !force) {
+        await deleteAlbum(albumId, title, { force: true });
+        return;
+      }
+
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body.detail || "Delete failed.");
+      }
+
+      if (currentAlbumDetailId === albumId) {
+        currentAlbumDetailId = null;
+        document.getElementById("album-detail-panel").classList.add("hidden");
+        document.getElementById("album-list").closest(".panel").classList.remove("hidden");
+      }
+
+      showAlbumToast(`Album "${title}" deleted.`, "");
+      await loadAlbums();
+    } catch (error) {
+      window.alert(`Could not delete album: ${error.message}`);
+    }
+  }
+
   async function loadAlbums() {
     const list = document.getElementById("album-list");
 
@@ -3219,7 +3278,10 @@
         card.innerHTML = `
           <div class="album-card-header">
             <span class="album-card-title">${escapeHtml(album.title)}</span>
-            <span class="badge ${badgeClass}">${escapeHtml(album.status)}</span>
+            <span style="display:flex; align-items:center; gap:8px;">
+              <span class="badge ${badgeClass}">${escapeHtml(album.status)}</span>
+              <button type="button" class="warning album-delete-btn" data-album-id="${album.id}" data-album-title="${escapeHtml(album.title)}" title="Delete album">Delete</button>
+            </span>
           </div>
           <div class="album-progress-bar">
             <div class="album-progress-bar-fill" style="width:${overallPct}%"></div>
@@ -3228,6 +3290,10 @@
           <div class="album-track-grid">${renderAlbumTrackSummaryGrid(album.track_summary)}</div>
         `;
         card.addEventListener("click", () => openAlbumDetail(album.id));
+        card.querySelector(".album-delete-btn").addEventListener("click", (event) => {
+          event.stopPropagation();
+          deleteAlbum(album.id, album.title);
+        });
         list.appendChild(card);
       });
     } catch (error) {
@@ -3331,6 +3397,14 @@
     document.getElementById("album-list").closest(".panel").classList.remove("hidden");
   });
 
+  document.getElementById("album-detail-delete-btn").addEventListener("click", () => {
+    if (!currentAlbumDetailId) {
+      return;
+    }
+    const title = document.getElementById("album-detail-title").textContent;
+    deleteAlbum(currentAlbumDetailId, title);
+  });
+
   function startAlbumPolling() {
     if (albumPollTimer) {
       return;
@@ -3339,6 +3413,7 @@
     albumPollTimer = setInterval(async () => {
       await loadAlbums();
       await loadAlbumYouTubeConnection();
+      await loadShorts();
       if (currentAlbumDetailId) {
         await openAlbumDetail(currentAlbumDetailId);
       }
@@ -3349,6 +3424,83 @@
     if (albumPollTimer) {
       clearInterval(albumPollTimer);
       albumPollTimer = null;
+    }
+  }
+
+  async function deleteShort(shortId, label, options = {}) {
+    const force = options.force === true;
+    const confirmMessage = force
+      ? `"${label}" has already been published to YouTube. Delete it anyway? This does NOT remove the video from YouTube -- only the local record.`
+      : `Delete short "${label}"? This permanently removes its generated video file.`;
+
+    if (!window.confirm(confirmMessage)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/v1/albums/shorts/${shortId}${force ? "?force=true" : ""}`, {
+        method: "DELETE"
+      });
+
+      if (response.status === 409 && !force) {
+        await deleteShort(shortId, label, { force: true });
+        return;
+      }
+
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body.detail || "Delete failed.");
+      }
+
+      showAlbumToast(`Short "${label}" deleted.`, "");
+      await loadShorts();
+    } catch (error) {
+      window.alert(`Could not delete short: ${error.message}`);
+    }
+  }
+
+  async function loadShorts() {
+    const summaryEl = document.getElementById("shorts-summary");
+    const listEl = document.getElementById("shorts-list");
+
+    try {
+      const data = await jsonRequest("/api/v1/albums/shorts");
+      const counts = data.summary || {};
+      const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
+
+      summaryEl.textContent = total === 0
+        ? "No shorts yet."
+        : `${counts.uploaded || 0} uploaded · ${counts.pending || 0} pending · ` +
+          `${counts.rendered || 0} rendering · ${counts.failed || 0} failed (of ${total} total)`;
+
+      listEl.innerHTML = "";
+
+      data.shorts.forEach((short) => {
+        const row = document.createElement("div");
+        row.className = "album-track-row";
+        const badgeClass = SHORTS_BADGE_CLASS[short.status] || "badge-pending";
+        const linkHtml = short.youtube_url
+          ? ` · <a href="${escapeHtml(short.youtube_url)}" target="_blank" rel="noopener">View on YouTube</a>`
+          : "";
+        const errorNote = short.error_message
+          ? `<div class="status">${escapeHtml(short.error_message)}</div>`
+          : "";
+        const label = `${short.track_title} — clip ${short.clip_index + 1}`;
+        row.innerHTML = `
+          <div>
+            <div>${escapeHtml(label)}${linkHtml}</div>
+            ${errorNote}
+          </div>
+          <span class="badge ${badgeClass}">${escapeHtml(short.status)}</span>
+          <button type="button" class="warning shorts-delete-btn">Delete</button>
+        `;
+        row.querySelector(".shorts-delete-btn").addEventListener("click", () => {
+          deleteShort(short.id, label);
+        });
+        listEl.appendChild(row);
+      });
+    } catch (error) {
+      listEl.innerHTML = "<p class=\"status\">Failed to load shorts.</p>";
     }
   }
 
@@ -3383,6 +3535,7 @@
 
   document.getElementById("album-generate-btn").addEventListener("click", generateAlbum);
   document.getElementById("album-refresh-btn").addEventListener("click", loadAlbums);
+  document.getElementById("shorts-refresh-btn").addEventListener("click", loadShorts);
 
   const VIEW_NAMES = ["home", "create", "albums", "settings"];
 
@@ -3402,6 +3555,7 @@
       loadAlbumQuota();
       loadAlbumYouTubeConnection();
       loadConceptResearch();
+      loadShorts();
       startAlbumPolling();
     } else {
       stopAlbumPolling();

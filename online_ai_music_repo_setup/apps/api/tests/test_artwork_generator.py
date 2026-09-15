@@ -2,7 +2,7 @@ from pathlib import Path
 
 from PIL import Image
 
-from app.services.artwork_generator import composite_thumbnail_labels, generate_artwork
+from app.services.artwork_generator import PRESETS, composite_thumbnail_labels, generate_artwork
 
 
 def test_generate_square_artwork(tmp_path: Path) -> None:
@@ -38,6 +38,25 @@ def test_artwork_is_deterministically_named(tmp_path: Path) -> None:
     )
 
     assert first.name == second.name
+
+
+def test_youtube_shorts_preset_is_vertical_1080x1920() -> None:
+    preset = PRESETS["youtube-shorts"]
+
+    assert (preset.width, preset.height) == (1080, 1920)
+
+
+def test_generate_youtube_shorts_artwork(tmp_path: Path) -> None:
+    path = generate_artwork(
+        title="Night Rain",
+        subtitle="Original Sleep Audio",
+        preset_name="youtube-shorts",
+        output_dir=tmp_path,
+        seed=7,
+    )
+
+    with Image.open(path) as image:
+        assert image.size == (1080, 1920)
 
 
 def test_composite_thumbnail_labels_preserves_size_and_format(tmp_path: Path) -> None:

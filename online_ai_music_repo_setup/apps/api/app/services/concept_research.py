@@ -41,6 +41,13 @@ CONCEPT_RESEARCH_QUERIES = {
     # across this entire research effort (see concepts.py's
     # "triple_benefit" for the full analysis).
     "triple_benefit": "white noise black screen 10 hours",
+    # Baby-sleep niche -- each query targets one of the 5 real content
+    # clusters found (see concepts.py's baby_* entries for the analysis).
+    "baby_white_noise": "baby white noise sleep",
+    "baby_womb": "womb sounds baby sleep",
+    "baby_shush": "shushing sound baby sleep",
+    "baby_lullaby": "baby lullaby music",
+    "baby_rain": "rain sounds baby sleep",
 }
 
 # "Ultra" analysis: a deeper sample per query than the original 10 --

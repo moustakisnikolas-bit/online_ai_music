@@ -53,12 +53,14 @@ def create_youtube_publication(
     audio_job_id: uuid.UUID,
     video_filename: str,
     title: str,
+    video_kind: str = "long",
 ) -> YouTubePublication:
     publication = YouTubePublication(
         audio_job_id=audio_job_id,
         video_filename=video_filename,
         title=title,
         status="queued",
+        video_kind=video_kind,
     )
     db.add(publication)
     db.commit()

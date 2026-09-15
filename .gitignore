@@ -32,6 +32,10 @@ Thumbs.db
 # not source.
 **/scripts/ops/daily_reports/
 
+# nohup output for the manually-run local API server / album worker
+# processes -- runtime output, not source.
+**/logs/
+
 # Sample library audio -- downloaded from Freesound at runtime by
 # freesound_importer.py, not source; multi-hundred-MB of .wav files that
 # don't belong in git history.

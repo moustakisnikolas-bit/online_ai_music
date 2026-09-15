@@ -17,6 +17,7 @@ from app.repositories.albums import (
     create_album_track,
     get_album_batch,
     list_album_tracks,
+    update_album_track,
 )
 from app.services import album_pipeline
 from app.services.ai_artwork_generator import ArtworkGenerationResult
@@ -31,7 +32,9 @@ from app.services.album_pipeline import (
     _track_description,
     _track_title,
     _track_upload_metadata,
+    album_has_published_tracks,
     create_album_batch,
+    delete_album,
     run_album_worker_tick,
 )
 
@@ -141,6 +144,79 @@ def test_create_album_batch_rejects_unknown_concept(db) -> None:
 
 def test_run_album_worker_tick_is_a_no_op_when_nothing_is_actionable(db) -> None:
     run_album_worker_tick(db)  # should not raise with an empty DB
+
+
+def test_album_has_published_tracks_is_false_for_a_fresh_batch(db) -> None:
+    batch = create_album_batch(db, concept_id="focus", seed=1)
+
+    assert album_has_published_tracks(db, batch) is False
+
+
+def test_album_has_published_tracks_is_true_once_a_track_has_uploaded_at(db) -> None:
+    from datetime import datetime, timezone
+
+    batch = create_album_batch(db, concept_id="focus", seed=1)
+    track = list_album_tracks(db, batch.id)[0]
+    update_album_track(db, track, uploaded_at=datetime.now(timezone.utc))
+
+    assert album_has_published_tracks(db, batch) is True
+
+
+def test_delete_album_removes_the_batch_and_all_its_tracks(db) -> None:
+    batch = create_album_batch(db, concept_id="focus", seed=1)
+
+    tracks_deleted = delete_album(db, batch)
+
+    assert tracks_deleted == album_pipeline.TRACKS_PER_ALBUM
+    assert get_album_batch(db, batch.id) is None
+    assert list_album_tracks(db, batch.id) == []
+
+
+def test_delete_album_removes_generated_video_artwork_and_audio_files(db, tmp_path: Path) -> None:
+    batch = create_album_batch(db, concept_id="focus", seed=1)
+    track = list_album_tracks(db, batch.id)[0]
+
+    album_pipeline.VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    album_pipeline.ARTWORK_DIR.mkdir(parents=True, exist_ok=True)
+    video_path = album_pipeline.VIDEO_DIR / f"{track.id}.mp4"
+    artwork_path = album_pipeline.ARTWORK_DIR / f"{track.id}.png"
+    audio_path = tmp_path / "audio" / f"{track.id}.wav"
+    audio_path.parent.mkdir(parents=True, exist_ok=True)
+    video_path.write_bytes(b"fake mp4")
+    artwork_path.write_bytes(b"fake png")
+    audio_path.write_bytes(b"fake wav")
+
+    audio_job = AudioJob(
+        title="t", mode="sine", channels="mono", duration_seconds=60, output_file_path=str(audio_path)
+    )
+    db.add(audio_job)
+    db.commit()
+    db.refresh(audio_job)
+    update_album_track(
+        db,
+        track,
+        video_filename=video_path.name,
+        artwork_filename=artwork_path.name,
+        audio_job_id=audio_job.id,
+    )
+
+    delete_album(db, batch)
+
+    assert not video_path.exists()
+    assert not artwork_path.exists()
+    assert not audio_path.exists()
+
+
+def test_delete_album_does_not_raise_when_generated_files_are_already_missing(db) -> None:
+    # Files can legitimately be gone already (partial render, prior manual
+    # cleanup) -- that must not block deleting the album's DB records.
+    batch = create_album_batch(db, concept_id="focus", seed=1)
+    track = list_album_tracks(db, batch.id)[0]
+    update_album_track(db, track, video_filename="never-existed.mp4", artwork_filename="never-existed.png")
+
+    delete_album(db, batch)  # should not raise
+
+    assert get_album_batch(db, batch.id) is None
 
 
 def test_full_pipeline_progresses_one_track_through_every_stage(monkeypatch, db, tmp_path: Path) -> None:

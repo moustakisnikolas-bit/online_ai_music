@@ -19,6 +19,8 @@ from app.repositories.albums import (
     TERMINAL_TRACK_STATUSES,
     create_album_batch as _insert_album_batch,
     create_album_track,
+    delete_album_batch as _delete_album_batch_row,
+    delete_album_track as _delete_album_track_row,
     get_album_batch,
     list_actionable_tracks,
     list_album_tracks,
@@ -55,7 +57,7 @@ from app.services.ai_artwork_generator import generate_ai_artwork
 from app.services.artwork_generator import PRESETS, composite_thumbnail_labels
 from app.services.audio_generator import generate_audio
 from app.services.llm_metadata_generator import generate_llm_metadata_package
-from app.services.metadata_generator import COMPLIANCE_NOTE
+from app.services.metadata_generator import compliance_note_for
 from app.services.video_renderer import render_static_video
 from app.services.youtube_publisher import (
     add_video_to_playlist,
@@ -176,6 +178,51 @@ def create_album_batch(
         )
 
     return update_album_batch(db, batch, status="generating")
+
+
+def album_has_published_tracks(db: Session, batch: AlbumBatch) -> bool:
+    """True if any track in this batch has actually reached YouTube --
+    the signal callers use to refuse a plain delete (see delete_album)."""
+    return any(
+        track.youtube_publication_id is not None or track.uploaded_at is not None
+        for track in list_album_tracks(db, batch.id)
+    )
+
+
+def _delete_generated_file_quietly(path: Path) -> None:
+    # Best-effort cleanup -- a file already missing (partial render, prior
+    # manual cleanup) shouldn't block deleting the album's DB records.
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        logger.warning("Could not delete generated file %s during album delete", path, exc_info=True)
+
+
+def delete_album(db: Session, batch: AlbumBatch) -> int:
+    """Permanently deletes an album batch, its tracks, and their locally
+    generated audio/artwork/video files. Deliberately does not touch
+    YouTube -- deleting these DB rows can't un-publish a real video, so
+    callers must refuse (or get explicit confirmation) when
+    album_has_published_tracks() is true; see the DELETE /albums/{id}
+    route for that check.
+    """
+    tracks = list_album_tracks(db, batch.id)
+
+    for track in tracks:
+        if track.video_filename:
+            _delete_generated_file_quietly(VIDEO_DIR / track.video_filename)
+        if track.artwork_filename:
+            _delete_generated_file_quietly(ARTWORK_DIR / track.artwork_filename)
+        if track.audio_job_id:
+            audio_job = get_audio_job(db, track.audio_job_id)
+            if audio_job and audio_job.output_file_path:
+                _delete_generated_file_quietly(Path(audio_job.output_file_path))
+
+    for track in tracks:
+        _delete_album_track_row(db, track)
+
+    _delete_album_batch_row(db, batch)
+    return len(tracks)
 
 
 # --- Per-stage pipeline functions ---------------------------------------
@@ -430,6 +477,11 @@ _DESCRIPTION_HOOKS: dict[str, str] = {
     "deep_study": "Built for the session that has to actually work.",
     "deep_chakra": "All seven centers, taken further than the usual pass.",
     "triple_benefit": "One soundscape, three real jobs: fall asleep, cram, or just focus.",
+    "baby_white_noise": "The sound real parents reach for at 3am.",
+    "baby_womb": "The sound they heard for nine months, still working.",
+    "baby_shush": "A steady, patient hush -- built to outlast the crying.",
+    "baby_lullaby": "A gentle melody built for the last five minutes before sleep.",
+    "baby_rain": "Soft rain, nothing else -- built to fade into the background.",
 }
 
 # Appended one at a time only until the description clears
@@ -537,7 +589,7 @@ def _track_upload_metadata(
             exc_info=True,
         )
         fallback_description = _track_description(concept, combination)
-        description = f"{fallback_description}\n\n{COMPLIANCE_NOTE}\n\n{hashtag_line}"
+        description = f"{fallback_description}\n\n{compliance_note_for(concept.id)}\n\n{hashtag_line}"
         tags = ["ambient", "soundscape", concept.id, *hashtag_words]
         return description, tags
 

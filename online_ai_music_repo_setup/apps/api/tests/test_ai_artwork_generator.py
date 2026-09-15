@@ -53,9 +53,12 @@ def _patch_settings(monkeypatch, settings_obj) -> None:
 
 
 class _FakeResponse:
-    def __init__(self, json_data: dict | None = None, content: bytes = b"") -> None:
+    def __init__(
+        self, json_data: dict | None = None, content: bytes = b"", status_code: int = 200
+    ) -> None:
         self._json_data = json_data
         self.content = content
+        self.status_code = status_code
 
     def raise_for_status(self) -> None:
         return None

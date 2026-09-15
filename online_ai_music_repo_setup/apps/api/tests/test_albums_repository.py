@@ -7,6 +7,8 @@ from app.models.album import AlbumBatch, AlbumTrack
 from app.repositories.albums import (
     create_album_batch,
     create_album_track,
+    delete_album_batch,
+    delete_album_track,
     get_album_batch,
     list_actionable_tracks,
     list_album_batches,
@@ -172,3 +174,22 @@ def test_update_album_batch_sets_arbitrary_fields(db) -> None:
     updated = update_album_batch(db, batch, status="uploading")
 
     assert updated.status == "uploading"
+
+
+def test_delete_album_track_removes_the_row(db) -> None:
+    batch = create_album_batch(db, concept_id="focus", title="Focus Vol. 1")
+    track = create_album_track(
+        db, album_batch_id=batch.id, sequence_index=0, title="A", combination={}
+    )
+
+    delete_album_track(db, track)
+
+    assert list_album_tracks(db, batch.id) == []
+
+
+def test_delete_album_batch_removes_the_row(db) -> None:
+    batch = create_album_batch(db, concept_id="focus", title="Focus Vol. 1")
+
+    delete_album_batch(db, batch)
+
+    assert get_album_batch(db, batch.id) is None

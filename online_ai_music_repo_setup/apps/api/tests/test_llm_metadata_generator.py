@@ -127,6 +127,32 @@ def test_generates_package_and_reports_cost(monkeypatch, db) -> None:
     assert "medical treatment" in package.compliance_note
 
 
+def test_generates_package_with_baby_compliance_note_for_baby_context(monkeypatch, db) -> None:
+    _patch_settings(monkeypatch, _FakeSettings())
+
+    response = _chat_response(
+        {
+            "title": "Womb Whoosh — Baby Sleep",
+            "subtitle": "Mixed Ambient · 15 Minutes",
+            "description": "A steady womb-like whoosh for infant sleep.",
+            "keywords": ["baby", "womb", "sleep", "white noise", "infant"],
+        },
+        cost=0.0018,
+    )
+    monkeypatch.setattr(httpx, "Client", lambda **_kwargs: _FakeClient(response))
+
+    package, _cost_usd = llm_metadata_generator.generate_llm_metadata_package(
+        source_title="Womb Whoosh",
+        mode="mixed_ambient",
+        duration_seconds=895,
+        db=db,
+        context="baby_womb",
+    )
+
+    assert "crib" in package.compliance_note
+    assert package.category == "Baby Womb Sounds"
+
+
 def test_missing_cost_returns_none(monkeypatch, db) -> None:
     _patch_settings(monkeypatch, _FakeSettings())
 
